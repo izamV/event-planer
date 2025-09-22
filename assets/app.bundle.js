@@ -717,7 +717,12 @@ row.appendChild(ddiv);
     const mk=(p,isActive)=>{
       const b=el("button","tab"+(isActive?" active":""), p.nombre);
       b.dataset.pid=p.id;
-      b.onclick=()=>{ state.project.view.lastTab=p.id; renderClient(); personTabs(); };
+      b.onclick=()=>{
+        showOnly("clienteView");
+        state.project.view.lastTab=p.id;
+        renderClient();
+        personTabs();
+      };
       tabs.appendChild(b);
     };
     const activeId = (state.project.view.lastTab==="CLIENTE"||state.project.view.lastTab==="cliente") ? "CLIENTE" : state.project.view.lastTab;
@@ -737,7 +742,12 @@ row.appendChild(ddiv);
       const chip=el("div","staffchip");
       const nameEl = el("span",null,p.nombre);
       nameEl.style.cursor="pointer";
-      nameEl.onclick=()=>{ state.project.view.lastTab=p.id; renderClient(); personTabs(); };
+      nameEl.onclick=()=>{
+        showOnly("clienteView");
+        state.project.view.lastTab=p.id;
+        renderClient();
+        personTabs();
+      };
       chip.appendChild(nameEl);
       const del=el("button","del","X"); del.title="Eliminar"; del.onclick=()=>{ if((state.sessions?.[p.id]||[]).length){ alert("No se puede eliminar: tiene acciones."); return; } state.staff=state.staff.filter(x=>x.id!==p.id); touch(); personTabs(); renderClient(); renderStaffList(); };
       chip.appendChild(del); box.appendChild(chip);
