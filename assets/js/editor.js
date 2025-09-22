@@ -28,8 +28,11 @@
         row.classList.add("canlink");
         row.onclick=()=>{
           if(s.taskTypeId){ alert("Destino debe estar vacio"); return; }
-          if(linkMode.kind==="prev"){ const r=setPrevLink(linkMode.sourceId,s.id); if(!r.ok){ alert(r.msg); return; } }
-          else { const r=setPostLink(linkMode.sourceId,s.id); if(!r.ok){ alert(r.msg); return; } }
+          let result;
+          if(linkMode.kind==="prev"){ result=setPrevLink(linkMode.sourceId,s.id); }
+          else { result=setPostLink(linkMode.sourceId,s.id); }
+          if(!result.ok){ alert(result.msg); return; }
+          if(result.msg && window.flashStatus){ window.flashStatus(result.msg); }
           linkMode.active=false; renderClient();
         };
       }

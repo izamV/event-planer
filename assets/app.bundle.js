@@ -170,6 +170,11 @@
     return null;
   }
   window.findSessionById = findSessionById;
+  const formatLinkMessage = (type, mainInfo, otherInfo)=>{
+    if(!mainInfo || !otherInfo) return null;
+    const fmt=(info)=> info.pid+" · #"+(info.index+1);
+    return type==="prev" ? `PRE vinculado: ${fmt(otherInfo)} → ${fmt(mainInfo)}` : `POST vinculado: ${fmt(mainInfo)} → ${fmt(otherInfo)}`;
+  };
 
   window.canLinkPrev = (mainId,dstId)=>{
     const A=findSessionById(mainId), B=findSessionById(dstId); if(!A||!B) return {ok:false,msg:"No encontrado"};
@@ -191,13 +196,17 @@
     const c=canLinkPrev(mainId,dstId); if(!c.ok) return c;
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
     d.taskTypeId = TASK_MONTAGE; d.materiales = (m.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)}));
-    d.inheritFromId = m.id; m.prevId = d.id; d.nextId = m.id; touch(); return {ok:true};
+    d.inheritFromId = m.id; m.prevId = d.id; d.nextId = m.id;
+    const msg=formatLinkMessage("prev", findSessionById(mainId), findSessionById(dstId));
+    touch(); return {ok:true,msg};
   };
   window.setPostLink = (mainId,dstId)=>{
     const c=canLinkPost(mainId,dstId); if(!c.ok) return c;
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
     d.taskTypeId = TASK_DESMONT; d.materiales = []; d.inheritFromId=null;
-    m.nextId = d.id; d.prevId = m.id; touch(); return {ok:true};
+    m.nextId = d.id; d.prevId = m.id;
+    const msg=formatLinkMessage("post", findSessionById(mainId), findSessionById(dstId));
+    touch(); return {ok:true,msg};
   };
   window.clearPrevLink = (mainId)=>{
     const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
@@ -324,22 +333,24 @@
         row.classList.add("canlink");
         row.onclick=()=>{
           if(s.taskTypeId){ alert("Destino debe estar vacio"); return; }
-          if(linkMode.kind==="prev"){ const r=setPrevLink(linkMode.sourceId,s.id); if(!r.ok){ alert(r.msg); return; } }
-          else { const r=setPostLink(linkMode.sourceId,s.id); if(!r.ok){ alert(r.msg); return; } }
+          let result;
+          if(linkMode.kind==="prev"){ result=setPrevLink(linkMode.sourceId,s.id); }
+          else { result=setPostLink(linkMode.sourceId,s.id); }
+          if(!result.ok){ alert(result.msg); return; }
+          if(result.msg && window.flashStatus){ window.flashStatus(result.msg); }
           linkMode.active=false; renderClient();
         };
       }
 
       // Selector, hora y duracion
       const sel=el("div","selcell");
-      const indexBar=el("div","slot-index");
+      const header=el("div","slot-index");
       const bSel=el("button","btn chip",String(idx+1)); bSel.title="Seleccionar"; bSel.onclick=(e)=>{ e.stopPropagation(); setSelected(pid,idx); renderVerticalEditor(container,pid); };
       const bDel=el("button","btn danger icon","✕"); bDel.title="Eliminar"; bDel.onclick=(e)=>{ e.stopPropagation(); deleteAtIndex(pid,idx); renderVerticalEditor(container,pid); };
-      indexBar.appendChild(bSel); indexBar.appendChild(bDel);
-      sel.appendChild(indexBar);
+      const range=el("span","time-range", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
+      header.appendChild(bSel); header.appendChild(bDel); header.appendChild(range);
+      sel.appendChild(header);
 
-      const timeBox=el("div","time-block");
-      const range=el("div","time-range", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
       const controls=el("div","time-controls");
       const doResize=(delta)=>{
         const cur=s.endMin-s.startMin;
@@ -353,8 +364,16 @@
       const plus=el("button","icon-btn","+"); plus.title="Aumentar duracion"; plus.onclick=(e)=>{ e.stopPropagation(); doResize(5); };
       controls.appendChild(minus); controls.appendChild(plus);
       const durationHint=el("div","duration-hint","Duración: "+String(s.endMin-s.startMin)+" min");
-      timeBox.appendChild(range); timeBox.appendChild(controls); timeBox.appendChild(durationHint);
-      sel.appendChild(timeBox); row.appendChild(sel);
+      const timeTools=el("div","time-tools");
+      timeTools.appendChild(controls); timeTools.appendChild(durationHint);
+      sel.appendChild(timeTools);
+
+      const linkWrap=el("div","link-controls under-slot");
+      const bPrev=el("button","icon-btn ghost","◀"); bPrev.title="Vincular PRE"; bPrev.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="prev"; linkMode.sourceId=s.id; renderClient(); };
+      const bPost=el("button","icon-btn ghost","▶"); bPost.title="Vincular POST"; bPost.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="post"; linkMode.sourceId=s.id; renderClient(); };
+      linkWrap.appendChild(bPrev); linkWrap.appendChild(bPost);
+      sel.appendChild(linkWrap);
+      row.appendChild(sel);
 
       // Tarea
       const tdiv=el("div","param task-cell"); tdiv.innerHTML="<label>Tarea</label>";
@@ -418,11 +437,7 @@
       const mdiv=el("div","param materials-cell");
       const mheader=el("div","materials-header");
       const mlabel=el("label",null,"Materiales");
-      const linkWrap=el("div","link-controls");
-      const bPrev=el("button","icon-btn ghost","◀"); bPrev.title="Vincular PRE"; bPrev.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="prev"; linkMode.sourceId=s.id; renderClient(); };
-      const bPost=el("button","icon-btn ghost","▶"); bPost.title="Vincular POST"; bPost.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="post"; linkMode.sourceId=s.id; renderClient(); };
-      linkWrap.appendChild(bPrev); linkWrap.appendChild(bPost);
-      mheader.appendChild(mlabel); mheader.appendChild(linkWrap); mdiv.appendChild(mheader);
+      mheader.appendChild(mlabel); mdiv.appendChild(mheader);
 
       const chips=el("div","link-tags");
       if(s.prevId){
@@ -711,10 +726,18 @@
     mk(clienteMeta, activeId==="CLIENTE");
     (state.staff||[]).forEach(s=> mk(s, activeId===s.id));
   }
+  let statusTimer=null;
   function renderStatus(){
     const t=state.project.updatedAt?new Date(state.project.updatedAt).toLocaleTimeString():"nunca";
     const elSt=document.getElementById("status"); if(elSt) elSt.textContent="Guardado "+t+" • "+(state.project.nombre||"");
   }
+  function flashStatus(msg,ms=2500){
+    const elSt=document.getElementById("status"); if(!elSt) return;
+    clearTimeout(statusTimer);
+    elSt.textContent=msg;
+    statusTimer=setTimeout(()=>{ renderStatus(); }, ms);
+  }
+  window.flashStatus = flashStatus;
   setOnTouched(renderStatus);
 
   window.renderClient = window.renderClient || function(){};
