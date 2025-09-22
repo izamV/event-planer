@@ -18,10 +18,18 @@
     mk(clienteMeta, activeId==="CLIENTE");
     (state.staff||[]).forEach(s=> mk(s, activeId===s.id));
   }
+  let statusTimer=null;
   function renderStatus(){
     const t=state.project.updatedAt?new Date(state.project.updatedAt).toLocaleTimeString():"nunca";
     const elSt=document.getElementById("status"); if(elSt) elSt.textContent="Guardado "+t+" • "+(state.project.nombre||"");
   }
+  function flashStatus(msg,ms=2500){
+    const elSt=document.getElementById("status"); if(!elSt) return;
+    clearTimeout(statusTimer);
+    elSt.textContent=msg;
+    statusTimer=setTimeout(()=>{ renderStatus(); }, ms);
+  }
+  window.flashStatus = flashStatus;
   setOnTouched(renderStatus);
 
   window.renderClient = window.renderClient || function(){};

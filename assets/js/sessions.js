@@ -78,6 +78,11 @@
     return null;
   }
   window.findSessionById = findSessionById;
+  const formatLinkMessage = (type, mainInfo, otherInfo)=>{
+    if(!mainInfo || !otherInfo) return null;
+    const fmt=(info)=> info.pid+" · #"+(info.index+1);
+    return type==="prev" ? `PRE vinculado: ${fmt(otherInfo)} → ${fmt(mainInfo)}` : `POST vinculado: ${fmt(mainInfo)} → ${fmt(otherInfo)}`;
+  };
 
   window.canLinkPrev = (mainId,dstId)=>{
     const A=findSessionById(mainId), B=findSessionById(dstId); if(!A||!B) return {ok:false,msg:"No encontrado"};
@@ -99,13 +104,17 @@
     const c=canLinkPrev(mainId,dstId); if(!c.ok) return c;
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
     d.taskTypeId = TASK_MONTAGE; d.materiales = (m.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)}));
-    d.inheritFromId = m.id; m.prevId = d.id; d.nextId = m.id; touch(); return {ok:true};
+    d.inheritFromId = m.id; m.prevId = d.id; d.nextId = m.id;
+    const msg=formatLinkMessage("prev", findSessionById(mainId), findSessionById(dstId));
+    touch(); return {ok:true,msg};
   };
   window.setPostLink = (mainId,dstId)=>{
     const c=canLinkPost(mainId,dstId); if(!c.ok) return c;
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
     d.taskTypeId = TASK_DESMONT; d.materiales = []; d.inheritFromId=null;
-    m.nextId = d.id; d.prevId = m.id; touch(); return {ok:true};
+    m.nextId = d.id; d.prevId = m.id;
+    const msg=formatLinkMessage("post", findSessionById(mainId), findSessionById(dstId));
+    touch(); return {ok:true,msg};
   };
   window.clearPrevLink = (mainId)=>{
     const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};

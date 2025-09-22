@@ -131,25 +131,25 @@ table.matlist td.act{width:120px}
   line-height:1;
   min-width:auto;
 }
-.time-block{
-  background:#0f172a;
-  border:1px solid #1f2937;
-  border-radius:.6rem;
-  padding:.5rem .65rem;
-  display:flex;
-  flex-direction:column;
-  gap:.4rem;
-  width:100%;
-}
 .time-range{
   font-variant-numeric:tabular-nums;
   font-weight:600;
   font-size:1.05rem;
 }
+.slot-index .time-range{
+  margin-left:.45rem;
+  white-space:nowrap;
+}
 .time-controls{
   display:flex;
   align-items:center;
   gap:.35rem;
+}
+.time-tools{
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+  align-items:flex-start;
 }
 .icon-btn{
   background:#0b1220;
@@ -188,6 +188,9 @@ table.matlist td.act{width:120px}
 .link-controls{
   display:flex;
   gap:.35rem;
+}
+.under-slot{
+  margin-top:.35rem;
 }
 .link-tags{
   display:flex;
