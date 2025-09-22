@@ -79,16 +79,11 @@ input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none;margin:0 
 }
 
 /* === Patch: Notas mitad ancho/altura + tabla materiales === */
-.vrow{display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-start}
-.vrow .param{flex:0 0 auto}
-.vrow .notes-cell{grid-column:1 / span 3}
 textarea.notes{min-height:70px}
 table.matlist{width:100%;border-collapse:collapse;margin-top:.35rem}
 table.matlist th,table.matlist td{border-bottom:1px solid #1f2937;padding:.25rem .35rem;text-align:left}
 table.matlist td.qty{width:90px}
 table.matlist td.act{width:120px}
-table.matlist .iconbtn{padding:.15rem .4rem;border:1px solid #1f2937;border-radius:.35rem;background:#0b1220;color:#e5e7eb;cursor:pointer;margin-right:.25rem}
-table.matlist .iconbtn:hover{filter:brightness(1.15)}
 
 /* === Tarjeta apilada === */
 .card .vitem{display:block;border-bottom:1px dashed #1f2937;padding:.45rem 0}
@@ -98,21 +93,6 @@ table.matlist .iconbtn:hover{filter:brightness(1.15)}
 .card .muted{opacity:.9}
 
 /* === Grid estable de filas (Transporte + materiales/notas fijas) === */
-.vrow{
-  display:grid;
-  grid-template-columns: auto 160px 1fr 1fr 1fr 1.6fr; /* # | hora/dur | tarea | loc/dest | veh | materiales */
-  gap:.75rem;
-  align-items:center;
-}
-.vrow .selcell{grid-column:1}
-.vrow .time{grid-column:2}
-.vrow .cell-task{grid-column:3}
-.vrow .cell-loc{grid-column:4}
-.vrow .cell-veh{grid-column:5}
-.vrow .cell-mat{grid-column:6}
-.vrow .mat-table{grid-column:4 / span 3}
-.vrow .notes-cell{grid-column:1 / span 3}
-.vrow .hint{grid-column:2 / span 2; font-size:.85rem; opacity:.85}
 .lock-chip{display:inline-flex;gap:.4rem;align-items:center;background:#0f172a;border:1px solid #1f2937;color:#e5e7eb;border-radius:.5rem;padding:.2rem .5rem}
 .lock-chip .ico{opacity:.7}
 .err{outline:1px solid #b91c1c; border-color:#b91c1c}
@@ -123,108 +103,147 @@ table.matlist{width:100%;border-collapse:collapse;margin-top:.35rem}
 table.matlist th,table.matlist td{border-bottom:1px solid #1f2937;padding:.25rem .35rem;text-align:left}
 table.matlist td.qty{width:90px}
 table.matlist td.act{width:120px}
-table.matlist .iconbtn{padding:.15rem .4rem;border:1px solid #1f2937;border-radius:.35rem;background:#0b1220;color:#e5e7eb;cursor:pointer;margin-right:.25rem}
-table.matlist .iconbtn:hover{filter:brightness(1.15)}
 
-/* === Patch EP: vrow grid estable y flechas tiempo === */
+/* === EP PATCH 2025: Layout filas horario renovado === */
 .vrow{
   display:grid;
-  grid-template-columns: auto 160px 1fr 1fr 1fr 1.6fr;
-  gap:.75rem;
-  align-items:center;
-}
-.vrow .selcell{grid-column:1}
-.vrow .time{grid-column:2}
-.vrow .cell-task{grid-column:3}
-.vrow .cell-loc{grid-column:4}
-.vrow .cell-veh{grid-column:5}
-.vrow .cell-mat{grid-column:6}
-.vrow .notes-cell{grid-column:1 / -1}
-.time-adjust{display:inline-flex; gap:.25rem; margin-left:.35rem}
-.time-adjust .btn{padding:.2rem .45rem}
-@media (max-width:900px){
-  .vrow{grid-template-columns:auto 140px 1fr 1fr}
-  .vrow .cell-veh{grid-column:3}
-  .vrow .cell-mat{grid-column:4}
-  .vrow .notes-cell{grid-column:1 / -1}
-}
-/* === Fin Patch EP === */
-
-/* === EP PATCH: layout vrow estable === */
-.vrow{display:grid;gap:.75rem;border:1px solid var(--line);border-radius:.6rem;padding:.6rem;
-      grid-template-columns:64px 140px 180px 1fr 1fr 1fr 1.6fr}
-.vrow .notes-cell{grid-column:1 / -1}
-.time-adjust{display:inline-flex;gap:.25rem;margin-left:.35rem}
-.time-adjust .btn{padding:.2rem .45rem}
-@media (max-width:1200px){
-  .vrow{grid-template-columns:64px 120px 160px 1fr 1fr}
-  .vrow .notes-cell{grid-column:1 / -1}
-}
-/* === fin patch === */
-
-/* === EP PATCH 2025: Layout filas horario === */
-.vrow{
-  display:grid;
-  gap:.75rem;
+  gap:.9rem;
   border:1px solid var(--line);
-  border-radius:.6rem;
-  padding:.75rem;
-  grid-template-columns:64px 170px 160px 1fr 1fr 1fr 1.5fr;
-  align-items:start;
+  border-radius:.75rem;
+  padding:.85rem;
+  grid-template-columns:220px repeat(3,minmax(0,1fr)) minmax(0,1.1fr);
+  align-items:flex-start;
 }
 .vrow .selcell{
   grid-column:1;
   display:flex;
   flex-direction:column;
-  gap:.35rem;
-  align-items:center;
+  gap:.55rem;
+  align-items:flex-start;
 }
-.vrow .time{
-  grid-column:2;
+.slot-index{
   display:flex;
   align-items:center;
   gap:.45rem;
 }
-.time-label{
-  font-variant-numeric:tabular-nums;
-  font-weight:600;
+.btn.icon{
+  padding:.25rem .45rem;
+  line-height:1;
+  min-width:auto;
 }
-.time-shift{
+.time-block{
+  background:#0f172a;
+  border:1px solid #1f2937;
+  border-radius:.6rem;
+  padding:.5rem .65rem;
   display:flex;
   flex-direction:column;
-  gap:.25rem;
+  gap:.4rem;
+  width:100%;
 }
-.time-shift .btn{
-  padding:.15rem .4rem;
-  line-height:1;
+.time-range{
+  font-variant-numeric:tabular-nums;
+  font-weight:600;
+  font-size:1.05rem;
 }
-.duration-cell{grid-column:3;}
-.task-cell{grid-column:4;}
-.location-cell{grid-column:5;}
-.vehicle-cell{grid-column:6;}
-.materials-cell{grid-column:7;}
-.notes-cell{grid-column:1 / -1;}
+.time-controls{
+  display:flex;
+  align-items:center;
+  gap:.35rem;
+}
+.icon-btn{
+  background:#0b1220;
+  border:1px solid #1f2937;
+  color:#e5e7eb;
+  border-radius:.45rem;
+  padding:.2rem .45rem;
+  cursor:pointer;
+  min-width:2rem;
+  text-align:center;
+  line-height:1.1;
+}
+.icon-btn:hover{filter:brightness(1.15);}
+.icon-btn.ghost{background:#111827;}
+.icon-btn.danger{background:#7f1d1d;border-color:#991b1b;color:#fff;}
+.duration-hint{
+  font-size:.85rem;
+  opacity:.8;
+}
+.task-cell{grid-column:2;}
+.location-cell{grid-column:3;}
+.vehicle-cell{grid-column:4;}
+.materials-cell{
+  grid-column:5;
+  display:flex;
+  flex-direction:column;
+  gap:.6rem;
+}
+.notes-cell{grid-column:1 / span 4;}
+.materials-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.5rem;
+}
+.link-controls{
+  display:flex;
+  gap:.35rem;
+}
+.link-tags{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.35rem;
+  font-size:.85rem;
+}
+.link-tag{
+  background:#0f172a;
+  border:1px solid #1f2937;
+  border-radius:.45rem;
+  padding:.15rem .45rem;
+}
+.materials-add{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 90px auto;
+  gap:.45rem;
+  align-items:center;
+}
+.materials-summary{
+  font-size:.9rem;
+  opacity:.85;
+}
+.matlist{font-size:.9rem;}
+.matlist td.act{
+  width:auto;
+}
+.matlist td.act .icon-btn{
+  min-width:auto;
+  padding:.2rem .4rem;
+}
+textarea.notes{min-height:110px;}
 @media (max-width:1200px){
   .vrow{
-    grid-template-columns:64px 150px 1fr 1fr;
+    grid-template-columns:210px minmax(0,1fr) minmax(0,1fr);
   }
-  .duration-cell{grid-column:3;}
-  .task-cell{grid-column:4;}
+  .task-cell{grid-column:2;}
   .location-cell{grid-column:3;}
-  .vehicle-cell{grid-column:4;}
+  .vehicle-cell{grid-column:2;}
   .materials-cell{grid-column:1 / -1;}
+  .notes-cell{grid-column:1 / -1;}
 }
 @media (max-width:900px){
   .vrow{
-    grid-template-columns:64px 1fr;
+    grid-template-columns:minmax(0,1fr);
   }
-  .vrow .time{grid-column:1 / -1;}
-  .duration-cell,
+  .vrow .selcell{grid-column:1;}
+  .slot-index{justify-content:flex-start;}
   .task-cell,
   .location-cell,
   .vehicle-cell,
-  .materials-cell{
+  .materials-cell,
+  .notes-cell{
     grid-column:1 / -1;
   }
+  .materials-add{grid-template-columns:minmax(0,1fr);}
 }
 /* === Fin EP PATCH 2025 === */

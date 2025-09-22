@@ -330,56 +330,31 @@
         };
       }
 
-      // Selector/Eliminar
+      // Selector, hora y duracion
       const sel=el("div","selcell");
+      const indexBar=el("div","slot-index");
       const bSel=el("button","btn chip",String(idx+1)); bSel.title="Seleccionar"; bSel.onclick=(e)=>{ e.stopPropagation(); setSelected(pid,idx); renderVerticalEditor(container,pid); };
-      const bDel=el("button","btn danger","X"); bDel.title="Eliminar"; bDel.onclick=(e)=>{ e.stopPropagation(); deleteAtIndex(pid,idx); renderVerticalEditor(container,pid); };
-      sel.appendChild(bSel); sel.appendChild(bDel); row.appendChild(sel);
+      const bDel=el("button","btn danger icon","✕"); bDel.title="Eliminar"; bDel.onclick=(e)=>{ e.stopPropagation(); deleteAtIndex(pid,idx); renderVerticalEditor(container,pid); };
+      indexBar.appendChild(bSel); indexBar.appendChild(bDel);
+      sel.appendChild(indexBar);
 
-      // Horario
-      const adjustTime=(delta)=>{
-        const list=getPersonSessions(pid); if(!list[idx]) return;
-        const step=Math.round(delta/5)*5; if(step===0) return;
-        if(idx===0){
-          const base=(state.horaInicial?.[pid] ?? list[0]?.startMin ?? 0);
-          const next=Math.max(0, base+step);
-          state.horaInicial[pid]=next;
-          rebaseTo(pid,next);
-          renderClient();
-          return;
-        }
-        const prev=list[idx-1]; if(!prev) return;
-        const prevDur=Math.max(5, (parseInt(prev.endMin||"0",10)||0) - (parseInt(prev.startMin||"0",10)||0));
-        const newDur=prevDur+step; if(newDur<5) return;
-        resizeSegment(pid, idx-1, newDur);
-        renderClient();
+      const timeBox=el("div","time-block");
+      const range=el("div","time-range", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
+      const controls=el("div","time-controls");
+      const doResize=(delta)=>{
+        const cur=s.endMin-s.startMin;
+        const target=Math.max(5, cur+delta);
+        const nd=Math.max(5, Math.round(target/5)*5);
+        if(nd===cur) return;
+        resizeSegment(pid, idx, nd);
+        renderVerticalEditor(container,pid);
       };
-      const timeCell=el("div","time time-cell");
-      const timeLabel=el("span","time-label", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
-      const timeShift=el("span","time-shift");
-      const timeUp=el("button","btn small","▲"); timeUp.onclick=(e)=>{ e.stopPropagation(); adjustTime(5); };
-      const timeDown=el("button","btn small","▼"); timeDown.onclick=(e)=>{ e.stopPropagation(); adjustTime(-5); };
-      timeShift.appendChild(timeUp); timeShift.appendChild(timeDown);
-      timeCell.appendChild(timeLabel); timeCell.appendChild(timeShift);
-      row.appendChild(timeCell);
-
-
-// Duracion
-const ddiv=el("div","param duration-cell"); ddiv.innerHTML="<label>Duracion (min)</label>";
-const din=el("input","input"); din.type="number"; din.min="5"; din.step="5"; din.value=String((s.endMin-s.startMin));
-const doResize=(delta)=>{
-  const cur=(s.endMin-s.startMin);
-  const nd=Math.max(5, Math.round((cur+delta)/5)*5);
-  resizeSegment(pid, idx, nd);
-  renderVerticalEditor(container,pid);
-};
-din.onchange=()=>{ const v=Math.max(5,Math.round((parseInt(din.value||"15",10)||15)/5)*5); resizeSegment(pid,idx,v); renderVerticalEditor(container,pid); };
-const box=el("span","time-adjust");
-const up=el("button","btn small","▲"); up.onclick=(e)=>{ e.stopPropagation(); doResize(5); };
-const dn=el("button","btn small","▼"); dn.onclick=(e)=>{ e.stopPropagation(); doResize(-5); };
-box.appendChild(up); box.appendChild(dn);
-ddiv.appendChild(din); ddiv.appendChild(box);
-row.appendChild(ddiv);
+      const minus=el("button","icon-btn","−"); minus.title="Reducir duracion"; minus.onclick=(e)=>{ e.stopPropagation(); doResize(-5); };
+      const plus=el("button","icon-btn","+"); plus.title="Aumentar duracion"; plus.onclick=(e)=>{ e.stopPropagation(); doResize(5); };
+      controls.appendChild(minus); controls.appendChild(plus);
+      const durationHint=el("div","duration-hint","Duración: "+String(s.endMin-s.startMin)+" min");
+      timeBox.appendChild(range); timeBox.appendChild(controls); timeBox.appendChild(durationHint);
+      sel.appendChild(timeBox); row.appendChild(sel);
 
       // Tarea
       const tdiv=el("div","param task-cell"); tdiv.innerHTML="<label>Tarea</label>";
@@ -440,32 +415,35 @@ row.appendChild(ddiv);
       row.appendChild(vdiv);
 
       // Materiales + Vínculos
-      const mdiv=el("div","param materials-cell"); mdiv.innerHTML="<label>Materiales</label>";
-      const bar=el("div","row");
-      const bPrev=el("button","btn small","◀ Vincular PRE"); bPrev.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="prev"; linkMode.sourceId=s.id; renderClient(); };
-      const bPost=el("button","btn small","Vincular POST ▶"); bPost.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="post"; linkMode.sourceId=s.id; renderClient(); };
-      bar.appendChild(bPrev); bar.appendChild(bPost); mdiv.appendChild(bar);
+      const mdiv=el("div","param materials-cell");
+      const mheader=el("div","materials-header");
+      const mlabel=el("label",null,"Materiales");
+      const linkWrap=el("div","link-controls");
+      const bPrev=el("button","icon-btn ghost","◀"); bPrev.title="Vincular PRE"; bPrev.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="prev"; linkMode.sourceId=s.id; renderClient(); };
+      const bPost=el("button","icon-btn ghost","▶"); bPost.title="Vincular POST"; bPost.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="post"; linkMode.sourceId=s.id; renderClient(); };
+      linkWrap.appendChild(bPrev); linkWrap.appendChild(bPost);
+      mheader.appendChild(mlabel); mheader.appendChild(linkWrap); mdiv.appendChild(mheader);
 
-      const chips=el("div","mini");
+      const chips=el("div","link-tags");
       if(s.prevId){
         const info=findSessionById(s.prevId); const tag=info? ("Previo: "+info.pid+" · #"+(info.index+1)) : ("Previo: "+s.prevId);
-        chips.appendChild(el("span",null,tag+" "));
-        const x=el("button","btn danger small","✕"); x.onclick=(e)=>{ e.stopPropagation(); clearPrevLink(s.id); renderClient(); }; chips.appendChild(x);
+        chips.appendChild(el("span","link-tag",tag));
+        const x=el("button","icon-btn danger","✕"); x.title="Quitar vinculo PRE"; x.onclick=(e)=>{ e.stopPropagation(); clearPrevLink(s.id); renderClient(); }; chips.appendChild(x);
       }
       if(s.nextId){
         const info=findSessionById(s.nextId); const tag=info? ("Post: "+info.pid+" · #"+(info.index+1)) : ("Post: "+s.nextId);
-        chips.appendChild(el("span",null," "+tag+" "));
-        const x=el("button","btn danger small","✕"); x.onclick=(e)=>{ e.stopPropagation(); clearPostLink(s.id); renderClient(); }; chips.appendChild(x);
+        chips.appendChild(el("span","link-tag",tag));
+        const x=el("button","icon-btn danger","✕"); x.title="Quitar vinculo POST"; x.onclick=(e)=>{ e.stopPropagation(); clearPostLink(s.id); renderClient(); }; chips.appendChild(x);
         // si soy PRE Montaje, permitir resync
         if(s.taskTypeId===TASK_MONTAGE){
-          const r=el("button","btn small","⟳"); r.title="Re-sincronizar materiales del principal"; r.onclick=(e)=>{ e.stopPropagation(); resyncPrevMaterials(s.id); renderClient(); }; chips.appendChild(r);
+          const r=el("button","icon-btn ghost","⟳"); r.title="Re-sincronizar materiales del principal"; r.onclick=(e)=>{ e.stopPropagation(); resyncPrevMaterials(s.id); renderClient(); }; chips.appendChild(r);
         }
       }
       if(s.prevId||s.nextId) mdiv.appendChild(chips);
 
       const selected = (getSelected(pid)===idx);
       if(selected){
-        const add=el("div","row");
+        const add=el("div","materials-add");
         const msel=el("select","input"); const m0=el("option",null, state.materialTypes.length? "- seleccionar -" : "No hay materiales (usar Catalogo)"); m0.value=""; msel.appendChild(m0);
         state.materialTypes.forEach(m=>{ if(!(s.materiales||[]).some(x=>x.materialTypeId===m.id)){ const o=el("option",null,m.nombre); o.value=m.id; msel.appendChild(o); } });
         const q=el("input","input"); q.type="number"; q.min="0"; q.step="1"; q.placeholder="1";
@@ -488,24 +466,28 @@ row.appendChild(ddiv);
           const tr=el("tr");
           tr.appendChild(el("td",null, state.materialTypes.find(mt=>mt.id===m.materialTypeId)?.nombre || "Material"));
           tr.appendChild(el("td","qty", String(parseInt(m.cantidad||"0",10)||0)));
-          const act=el("td","act"); const p=el("button","iconbtn","+"); p.onclick=(e)=>{ e.stopPropagation(); inc(m.materialTypeId); };
-          const r=el("button","iconbtn","-"); r.onclick=(e)=>{ e.stopPropagation(); dec(m.materialTypeId); };
-          const d=el("button","iconbtn","Eliminar"); d.onclick=(e)=>{ e.stopPropagation(); del(m.materialTypeId); };
+          const act=el("td","act");
+          const p=el("button","icon-btn ghost","+"); p.title="Sumar"; p.onclick=(e)=>{ e.stopPropagation(); inc(m.materialTypeId); };
+          const r=el("button","icon-btn ghost","−"); r.title="Restar"; r.onclick=(e)=>{ e.stopPropagation(); dec(m.materialTypeId); };
+          const d=el("button","icon-btn danger","✕"); d.title="Eliminar"; d.onclick=(e)=>{ e.stopPropagation(); del(m.materialTypeId); };
           act.appendChild(p); act.appendChild(r); act.appendChild(d); tr.appendChild(act); tb.appendChild(tr);
         });
         if(!(s.materiales||[]).length){ const tr=el("tr"); const td=el("td"); td.colSpan=3; td.textContent="Sin materiales"; tr.appendChild(td); tb.appendChild(tr); }
         tbl.appendChild(tb); mdiv.appendChild(tbl);
       }else{
         const txt=(s.materiales||[]).map(m=> (state.materialTypes.find(mt=>mt.id===m.materialTypeId)?.nombre||"Material")+" x "+(parseInt(m.cantidad||"0",10)||0)).join(", ");
-        mdiv.appendChild(el("div","mini", txt||"Sin materiales"));
+        mdiv.appendChild(el("div","materials-summary", txt||"Sin materiales"));
       }
       row.appendChild(mdiv);
 
       // Notas
-      const ndiv=el("div","param notes-cell"); ndiv.innerHTML="<label>Notas</label>";
-      const ta=el("textarea","input"); ta.rows=3; ta.value=String(s.comentario||""); ta.placeholder="Comentarios de la accion";
+      const ndiv=el("div","param notes-cell");
+      const nlabel=el("label",null,"Notas");
+      const ta=el("textarea","input notes"); ta.rows=3; ta.value=String(s.comentario||""); ta.placeholder="Comentarios de la acción";
       ta.oninput=()=>{ s.comentario=ta.value; touch(); autoGrow(ta); };
-      setTimeout(()=>autoGrow(ta),0); ndiv.appendChild(ta); row.appendChild(ndiv);
+      setTimeout(()=>autoGrow(ta),0);
+      ndiv.appendChild(nlabel);
+      ndiv.appendChild(ta); row.appendChild(ndiv);
 
       container.appendChild(row);
     });
