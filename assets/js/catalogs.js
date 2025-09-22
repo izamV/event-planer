@@ -1,0 +1,104 @@
+﻿(function(){
+  "use strict";
+  function emitChanged(){ document.dispatchEvent(new Event("catalogs-changed")); touch(); }
+
+  function lockMark(tr, locked){ if(!locked) return; tr.setAttribute("data-locked","true"); tr.querySelectorAll("button,input,select").forEach(n=>{ if(n.tagName==="BUTTON" && /eliminar/i.test(n.textContent||"")) n.disabled=true; else if(n.tagName!=="BUTTON") n.disabled=true; }); }
+
+  window.openCatLoc = (cont)=>{
+    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Localizaciones"));
+    const add=el("div","row");
+    const name=el("input","input"); name.placeholder="Nombre";
+    const latlng=el("input","input"); latlng.placeholder="lat,long";
+    const b=el("button","btn","Añadir");
+    b.onclick=()=>{
+      const n=name.value.trim(); const ll=(latlng.value||"").split(",").map(s=>s.trim());
+      if(!n) return;
+      state.locations.push({id:"L_"+(state.locations.length+1), nombre:n, lat:ll[0]||"", lng:ll[1]||""});
+      name.value=""; latlng.value=""; emitChanged(); openCatLoc(cont);
+    };
+    add.appendChild(name); add.appendChild(latlng); add.appendChild(b); cont.appendChild(add);
+
+    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
+    state.locations.forEach((l,i)=>{
+      const tr=el("tr");
+      const n=el("input","input"); n.value=l.nombre; n.oninput=()=>{ l.nombre=n.value; touch(); };
+      const ll=el("input","input"); ll.value=(l.lat||"")+","+(l.lng||""); ll.oninput=()=>{ const sp=(ll.value||"").split(","); l.lat=(sp[0]||"").trim(); l.lng=(sp[1]||"").trim(); touch(); };
+      const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.locations.splice(i,1); emitChanged(); openCatLoc(cont); };
+      tr.appendChild(n); tr.appendChild(ll); tr.appendChild(del); tb.appendChild(tr);
+    });
+    cont.appendChild(tbl);
+  };
+
+  window.openCatTask = (cont)=>{
+    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Tareas"));
+    const add=el("div","row");
+    const name=el("input","input"); name.placeholder="Nombre";
+    const color=el("input","input"); color.type="color"; color.value="#60a5fa";
+    const b=el("button","btn","Añadir");
+    b.onclick=()=>{
+      const n=name.value.trim(); if(!n) return;
+      state.taskTypes.push({id:"T_"+(state.taskTypes.length+1), nombre:n, color:color.value||"#60a5fa", locked:false});
+      name.value=""; emitChanged(); openCatTask(cont);
+    };
+    add.appendChild(name); add.appendChild(color); add.appendChild(b); cont.appendChild(add);
+
+    // Lista
+    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
+    // Orden: bloqueados primero
+    const order=id=>({[TASK_TRANSP]:0,[TASK_MONTAGE]:1,[TASK_DESMONT]:2}[id]??9);
+    [...state.taskTypes].sort((a,b)=> (a.locked===b.locked? order(a.id)-order(b.id) : (a.locked?-1:1)) || (a.nombre||"").localeCompare(b.nombre||"") )
+      .forEach((t,idx)=>{
+        const i= state.taskTypes.findIndex(x=>x.id===t.id);
+        const tr=el("tr");
+        const n=el("input","input"); n.value=t.nombre; n.oninput=()=>{ t.nombre=n.value; touch(); };
+        const c=el("input","input"); c.type="color"; c.value=t.color||"#60a5fa"; c.oninput=()=>{ t.color=c.value; touch(); };
+        const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.taskTypes.splice(i,1); emitChanged(); openCatTask(cont); };
+        tr.appendChild(n); tr.appendChild(c); tr.appendChild(del); tb.appendChild(tr);
+        lockMark(tr, !!t.locked);
+      });
+    cont.appendChild(tbl);
+  };
+
+  window.openCatMat = (cont)=>{
+    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Materiales"));
+    const add=el("div","row");
+    const name=el("input","input"); name.placeholder="Nombre";
+    const b=el("button","btn","Añadir");
+    b.onclick=()=>{
+      const n=name.value.trim(); if(!n) return;
+      state.materialTypes.push({id:"MT_"+(state.materialTypes.length+1), nombre:n});
+      name.value=""; emitChanged(); openCatMat(cont);
+    };
+    add.appendChild(name); add.appendChild(b); cont.appendChild(add);
+
+    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
+    state.materialTypes.forEach((t,i)=>{
+      const tr=el("tr");
+      const n=el("input","input"); n.value=t.nombre; n.oninput=()=>{ t.nombre=n.value; touch(); };
+      const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.materialTypes.splice(i,1); emitChanged(); openCatMat(cont); };
+      tr.appendChild(n); tr.appendChild(del); tb.appendChild(tr);
+    });
+    cont.appendChild(tbl);
+  };
+
+  window.openCatVeh = (cont)=>{
+    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Vehículos"));
+    const add=el("div","row");
+    const name=el("input","input"); name.placeholder="Nombre";
+    const b=el("button","btn","Añadir");
+    b.onclick=()=>{ const n=name.value.trim(); if(!n) return; state.vehicles.push({id:"V_"+(state.vehicles.length+1), nombre:n, locked:false}); name.value=""; emitChanged(); openCatVeh(cont); };
+    add.appendChild(name); add.appendChild(b); cont.appendChild(add);
+
+    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
+    [...state.vehicles].sort((a,b)=> (a.locked===b.locked?0:(a.locked?-1:1)) || (a.nombre||"").localeCompare(b.nombre||""))
+      .forEach((v,idx)=>{
+        const i= state.vehicles.findIndex(x=>x.id===v.id);
+        const tr=el("tr");
+        const n=el("input","input"); n.value=v.nombre; n.oninput=()=>{ v.nombre=n.value; touch(); };
+        const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.vehicles.splice(i,1); emitChanged(); openCatVeh(cont); };
+        tr.appendChild(n); tr.appendChild(del); tb.appendChild(tr);
+        lockMark(tr, !!v.locked);
+      });
+    cont.appendChild(tbl);
+  };
+})();
