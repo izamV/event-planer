@@ -11,9 +11,21 @@
     const latlng=el("input","input"); latlng.placeholder="lat,long";
     const b=el("button","btn","Añadir");
     b.onclick=()=>{
-      const n=name.value.trim(); const ll=(latlng.value||"").split(",").map(s=>s.trim());
+      const n=name.value.trim();
+      const raw=(latlng.value||"").trim();
+      const parts=raw.split(",").map(s=>s.trim()).filter(Boolean);
+      const lat=parts[0];
+      const lng=parts[1];
+      const latNum=Number(lat);
+      const lngNum=Number(lng);
       if(!n) return;
-      state.locations.push({id:"L_"+(state.locations.length+1), nombre:n, lat:ll[0]||"", lng:ll[1]||""});
+      if(parts.length<2 || !lat || !lng || !Number.isFinite(latNum) || !Number.isFinite(lngNum) || Math.abs(latNum)>90 || Math.abs(lngNum)>180){
+        latlng.classList.add("err");
+        if(typeof flashStatus==="function") flashStatus("Introduce latitud y longitud válidas");
+        return;
+      }
+      latlng.classList.remove("err");
+      state.locations.push({id:"L_"+(state.locations.length+1), nombre:n, lat:lat, lng:lng});
       name.value=""; latlng.value=""; emitChanged(); openCatLoc(cont);
     };
     add.appendChild(name); add.appendChild(latlng); add.appendChild(b); cont.appendChild(add);
