@@ -5,20 +5,18 @@
     ["clienteView","catalogView","resultView"].forEach(v=>{ const n=document.getElementById(v); if(n) n.style.display=(v===id)?"":"none"; });
   }
   function personTabs(){
-  const tabs=document.getElementById("personTabs"); if(!tabs) return;
-  tabs.innerHTML="";
-  const mk=(p,isActive)=>{
-    const b=el("button","tab"+(isActive?" active":""), p.nombre);
-    b.dataset.pid=p.id;
-    b.onclick=()=>{ state.project.view.lastTab=p.id; renderClient(); personTabs(); };
-    tabs.appendChild(b);
-  };
-  const activeId = (state.project.view.lastTab==="CLIENTE"||state.project.view.lastTab==="cliente") ? "CLIENTE" : state.project.view.lastTab;
-  mk({id:"CLIENTE", nombre:"Cliente"}, activeId==="CLIENTE");
-  (state.staff||[]).forEach(s=> mk(s, activeId===s.id));
-}; tabs.appendChild(b); };
-    mk(clienteMeta, (state.project.view.lastTab==="CLIENTE"||state.project.view.lastTab==="cliente"));
-    state.staff.forEach(s=> mk(s, state.project.view.lastTab===s.id));
+    const tabs=document.getElementById("personTabs");
+    if(!tabs) return;
+    tabs.innerHTML="";
+    const mk=(p,isActive)=>{
+      const b=el("button","tab"+(isActive?" active":""), p.nombre);
+      b.dataset.pid=p.id;
+      b.onclick=()=>{ state.project.view.lastTab=p.id; renderClient(); personTabs(); };
+      tabs.appendChild(b);
+    };
+    const activeId = (state.project.view.lastTab==="CLIENTE"||state.project.view.lastTab==="cliente") ? "CLIENTE" : state.project.view.lastTab;
+    mk(clienteMeta, activeId==="CLIENTE");
+    (state.staff||[]).forEach(s=> mk(s, activeId===s.id));
   }
   function renderStatus(){
     const t=state.project.updatedAt?new Date(state.project.updatedAt).toLocaleTimeString():"nunca";
@@ -30,7 +28,11 @@
   const renderStaffList=()=>{
     const box=document.getElementById("staffList"); if(!box) return; box.innerHTML=""; box.className="stafflist";
     state.staff.forEach(p=>{
-      const chip=el("div","staffchip"); chip.appendChild(el("span",null,p.nombre));
+      const chip=el("div","staffchip");
+      const nameEl = el("span",null,p.nombre);
+      nameEl.style.cursor="pointer";
+      nameEl.onclick=()=>{ state.project.view.lastTab=p.id; renderClient(); personTabs(); };
+      chip.appendChild(nameEl);
       const del=el("button","del","X"); del.title="Eliminar"; del.onclick=()=>{ if((state.sessions?.[p.id]||[]).length){ alert("No se puede eliminar: tiene acciones."); return; } state.staff=state.staff.filter(x=>x.id!==p.id); touch(); personTabs(); renderClient(); renderStaffList(); };
       chip.appendChild(del); box.appendChild(chip);
     });
