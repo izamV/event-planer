@@ -161,3 +161,70 @@ table.matlist .iconbtn:hover{filter:brightness(1.15)}
   .vrow .notes-cell{grid-column:1 / -1}
 }
 /* === fin patch === */
+
+/* === EP PATCH 2025: Layout filas horario === */
+.vrow{
+  display:grid;
+  gap:.75rem;
+  border:1px solid var(--line);
+  border-radius:.6rem;
+  padding:.75rem;
+  grid-template-columns:64px 170px 160px 1fr 1fr 1fr 1.5fr;
+  align-items:start;
+}
+.vrow .selcell{
+  grid-column:1;
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+  align-items:center;
+}
+.vrow .time{
+  grid-column:2;
+  display:flex;
+  align-items:center;
+  gap:.45rem;
+}
+.time-label{
+  font-variant-numeric:tabular-nums;
+  font-weight:600;
+}
+.time-shift{
+  display:flex;
+  flex-direction:column;
+  gap:.25rem;
+}
+.time-shift .btn{
+  padding:.15rem .4rem;
+  line-height:1;
+}
+.duration-cell{grid-column:3;}
+.task-cell{grid-column:4;}
+.location-cell{grid-column:5;}
+.vehicle-cell{grid-column:6;}
+.materials-cell{grid-column:7;}
+.notes-cell{grid-column:1 / -1;}
+@media (max-width:1200px){
+  .vrow{
+    grid-template-columns:64px 150px 1fr 1fr;
+  }
+  .duration-cell{grid-column:3;}
+  .task-cell{grid-column:4;}
+  .location-cell{grid-column:3;}
+  .vehicle-cell{grid-column:4;}
+  .materials-cell{grid-column:1 / -1;}
+}
+@media (max-width:900px){
+  .vrow{
+    grid-template-columns:64px 1fr;
+  }
+  .vrow .time{grid-column:1 / -1;}
+  .duration-cell,
+  .task-cell,
+  .location-cell,
+  .vehicle-cell,
+  .materials-cell{
+    grid-column:1 / -1;
+  }
+}
+/* === Fin EP PATCH 2025 === */

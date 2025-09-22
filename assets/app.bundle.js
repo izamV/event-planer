@@ -337,11 +337,35 @@
       sel.appendChild(bSel); sel.appendChild(bDel); row.appendChild(sel);
 
       // Horario
-      row.appendChild(el("div","time", toHHMM(s.startMin)+"-"+toHHMM(s.endMin)));
+      const adjustTime=(delta)=>{
+        const list=getPersonSessions(pid); if(!list[idx]) return;
+        const step=Math.round(delta/5)*5; if(step===0) return;
+        if(idx===0){
+          const base=(state.horaInicial?.[pid] ?? list[0]?.startMin ?? 0);
+          const next=Math.max(0, base+step);
+          state.horaInicial[pid]=next;
+          rebaseTo(pid,next);
+          renderClient();
+          return;
+        }
+        const prev=list[idx-1]; if(!prev) return;
+        const prevDur=Math.max(5, (parseInt(prev.endMin||"0",10)||0) - (parseInt(prev.startMin||"0",10)||0));
+        const newDur=prevDur+step; if(newDur<5) return;
+        resizeSegment(pid, idx-1, newDur);
+        renderClient();
+      };
+      const timeCell=el("div","time time-cell");
+      const timeLabel=el("span","time-label", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
+      const timeShift=el("span","time-shift");
+      const timeUp=el("button","btn small","▲"); timeUp.onclick=(e)=>{ e.stopPropagation(); adjustTime(5); };
+      const timeDown=el("button","btn small","▼"); timeDown.onclick=(e)=>{ e.stopPropagation(); adjustTime(-5); };
+      timeShift.appendChild(timeUp); timeShift.appendChild(timeDown);
+      timeCell.appendChild(timeLabel); timeCell.appendChild(timeShift);
+      row.appendChild(timeCell);
 
-      
+
 // Duracion
-const ddiv=el("div","param"); ddiv.innerHTML="<label>Duracion (min)</label>";
+const ddiv=el("div","param duration-cell"); ddiv.innerHTML="<label>Duracion (min)</label>";
 const din=el("input","input"); din.type="number"; din.min="5"; din.step="5"; din.value=String((s.endMin-s.startMin));
 const doResize=(delta)=>{
   const cur=(s.endMin-s.startMin);
@@ -358,7 +382,7 @@ ddiv.appendChild(din); ddiv.appendChild(box);
 row.appendChild(ddiv);
 
       // Tarea
-      const tdiv=el("div","param cell-task"); tdiv.innerHTML="<label>Tarea</label>";
+      const tdiv=el("div","param task-cell"); tdiv.innerHTML="<label>Tarea</label>";
       const tsel=el("select","input"); const t0=el("option",null,"- seleccionar -"); t0.value=""; tsel.appendChild(t0);
       const allowMont=!!s.nextId; const allowDesm=!!s.prevId;
       state.taskTypes.forEach(t=>{
@@ -385,7 +409,7 @@ row.appendChild(ddiv);
       tdiv.appendChild(tsel); row.appendChild(tdiv);
 
       // Localización (bloqueada salvo primera o transporte)
-      const ldiv=el("div","param cell-loc");
+      const ldiv=el("div","param location-cell");
       if(idx===0 && s.taskTypeId!==TASK_TRANSP){
         ldiv.innerHTML="<label>Localizacion inicial</label>";
         const lsel=el("select","input"); const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
@@ -405,7 +429,7 @@ row.appendChild(ddiv);
       row.appendChild(ldiv);
 
       // Vehiculo (solo Transporte)
-      const vdiv=el("div","param cell-veh"); vdiv.innerHTML="<label>Vehiculo</label>";
+      const vdiv=el("div","param vehicle-cell"); vdiv.innerHTML="<label>Vehiculo</label>";
       if(s.taskTypeId===TASK_TRANSP){
         const vsel=el("select","input"); const v0=el("option",null,"- seleccionar -"); v0.value=""; vsel.appendChild(v0);
         state.vehicles.forEach(v=>{ const o=el("option",null,v.nombre); o.value=v.id; if(v.id===s.vehicleId) o.selected=true; vsel.appendChild(o); });
@@ -416,7 +440,7 @@ row.appendChild(ddiv);
       row.appendChild(vdiv);
 
       // Materiales + Vínculos
-      const mdiv=el("div","param cell-mat"); mdiv.innerHTML="<label>Materiales</label>";
+      const mdiv=el("div","param materials-cell"); mdiv.innerHTML="<label>Materiales</label>";
       const bar=el("div","row");
       const bPrev=el("button","btn small","◀ Vincular PRE"); bPrev.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="prev"; linkMode.sourceId=s.id; renderClient(); };
       const bPost=el("button","btn small","Vincular POST ▶"); bPost.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="post"; linkMode.sourceId=s.id; renderClient(); };
