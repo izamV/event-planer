@@ -32,6 +32,9 @@ textarea{min-height:96px;resize:vertical}
 .param{display:flex;gap:.4rem;align-items:center;min-width:0}
 .param label{white-space:nowrap}
 .param .input, .param select, .param textarea{flex:1 1 auto; width:100%; min-width:0}
+.param.stacked{flex-direction:column;align-items:flex-start;gap:.4rem}
+.param.stacked label{margin-bottom:.05rem}
+.param.stacked .input,.param.stacked select,.param.stacked textarea{width:100%}
 
 .mattable{width:100%;border-collapse:collapse;margin-top:.5rem}
 .mattable th,.mattable td{border:1px solid #1f2937;padding:.3rem .4rem}
@@ -153,8 +156,18 @@ table.matlist td.act{width:120px}
 }
 .time-display{
   display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:.4rem;
+}
+.time-main{
+  display:flex;
   align-items:center;
   gap:.45rem;
+}
+.time-display .duration-hint{
+  width:100%;
+  text-align:center;
 }
 .time-adjust{
   display:flex;
@@ -205,6 +218,9 @@ table.matlist td.act{width:120px}
 }
 .transport-flow{
   margin-top:.25rem;
+  width:100%;
+  text-align:left;
+  line-height:1.35;
 }
 .task-cell{grid-column:2;}
 .location-cell{grid-column:3;}
