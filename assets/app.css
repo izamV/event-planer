@@ -151,6 +151,19 @@ table.matlist td.act{width:120px}
   gap:.35rem;
   align-items:flex-start;
 }
+.time-display{
+  display:flex;
+  align-items:center;
+  gap:.45rem;
+}
+.time-adjust{
+  display:flex;
+  flex-direction:column;
+  gap:.3rem;
+}
+.time-adjust .icon-btn{
+  min-width:2rem;
+}
 .icon-btn{
   background:#0b1220;
   border:1px solid #1f2937;
@@ -168,6 +181,30 @@ table.matlist td.act{width:120px}
 .duration-hint{
   font-size:.85rem;
   opacity:.8;
+}
+.link-hints{
+  display:flex;
+  flex-direction:column;
+  gap:.25rem;
+  width:100%;
+}
+.link-hint{
+  display:flex;
+  align-items:center;
+  gap:.35rem;
+  flex-wrap:wrap;
+}
+.link-hint span:first-child{
+  flex:1 1 auto;
+}
+.link-hint .btn.danger{
+  margin-left:auto;
+}
+.link-hint .icon-btn{
+  min-width:2rem;
+}
+.transport-flow{
+  margin-top:.25rem;
 }
 .task-cell{grid-column:2;}
 .location-cell{grid-column:3;}

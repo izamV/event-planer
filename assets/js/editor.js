@@ -20,14 +20,34 @@
     const list=getPersonSessions(pid);
     if(!list.length){ container.appendChild(el("div","mini","No hay acciones.")); return; }
 
+    const computeTransportFlow=(targetIdx)=>{
+      let cur=null;
+      for(let i=0;i<list.length;i++){
+        const item=list[i];
+        if(i===targetIdx){
+          return {origin:cur,destination:item.locationId||cur};
+        }
+        if(i===0 && item.taskTypeId!==TASK_TRANSP){
+          cur=item.locationId||cur;
+          continue;
+        }
+        if(item.taskTypeId===TASK_TRANSP){
+          const dest=item.locationId||cur;
+          cur=dest;
+        }else{
+          cur=item.locationId||cur;
+        }
+      }
+      const fallback=list[targetIdx];
+      return {origin:cur,destination:fallback?.locationId||cur};
+    };
+
     list.forEach((s,idx)=>{
       const row=el("div","vrow"); if(getSelected(pid)===idx) row.classList.add("selected");
 
-      // En modo vinculo, permitir elegir fila vacia
       if(linkMode.active){
         row.classList.add("canlink");
         row.onclick=()=>{
-          if(s.taskTypeId){ alert("Destino debe estar vacio"); return; }
           let result;
           if(linkMode.kind==="prev"){ result=setPrevLink(linkMode.sourceId,s.id); }
           else { result=setPostLink(linkMode.sourceId,s.id); }
@@ -37,61 +57,72 @@
         };
       }
 
-      // Selector/Eliminar
       const sel=el("div","selcell");
+      const header=el("div","slot-index");
       const bSel=el("button","btn chip",String(idx+1)); bSel.title="Seleccionar"; bSel.onclick=(e)=>{ e.stopPropagation(); setSelected(pid,idx); renderVerticalEditor(container,pid); };
-      const bDel=el("button","btn danger","X"); bDel.title="Eliminar"; bDel.onclick=(e)=>{ e.stopPropagation(); deleteAtIndex(pid,idx); renderVerticalEditor(container,pid); };
-      sel.appendChild(bSel); sel.appendChild(bDel); row.appendChild(sel);
-
-      // Horario
-      const adjustTime=(delta)=>{
-        const list=getPersonSessions(pid); if(!list[idx]) return;
-        const step=Math.round(delta/5)*5; if(step===0) return;
-        if(idx===0){
-          const base=(state.horaInicial?.[pid] ?? list[0]?.startMin ?? 0);
-          const next=Math.max(0, base+step);
-          state.horaInicial[pid]=next;
-          rebaseTo(pid,next);
-          renderClient();
-          return;
-        }
-        const prev=list[idx-1]; if(!prev) return;
-        const prevDur=Math.max(5, (parseInt(prev.endMin||"0",10)||0) - (parseInt(prev.startMin||"0",10)||0));
-        const newDur=prevDur+step; if(newDur<5) return;
-        resizeSegment(pid, idx-1, newDur);
-        renderClient();
+      const bDel=el("button","btn danger icon","✕"); bDel.title="Eliminar"; bDel.onclick=(e)=>{ e.stopPropagation(); deleteAtIndex(pid,idx); renderVerticalEditor(container,pid); };
+      const range=el("span","time-range", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
+      const timeAdjust=el("div","time-adjust");
+      const doResize=(delta)=>{
+        const cur=s.endMin-s.startMin;
+        const target=Math.max(5, cur+delta);
+        const nd=Math.max(5, Math.round(target/5)*5);
+        if(nd===cur) return;
+        resizeSegment(pid, idx, nd);
+        renderVerticalEditor(container,pid);
       };
-      const timeCell=el("div","time time-cell");
-      const timeLabel=el("span","time-label", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
-      const timeShift=el("span","time-shift");
-      const timeUp=el("button","btn small","▲"); timeUp.onclick=(e)=>{ e.stopPropagation(); adjustTime(5); };
-      const timeDown=el("button","btn small","▼"); timeDown.onclick=(e)=>{ e.stopPropagation(); adjustTime(-5); };
-      timeShift.appendChild(timeUp); timeShift.appendChild(timeDown);
-      timeCell.appendChild(timeLabel); timeCell.appendChild(timeShift);
-      row.appendChild(timeCell);
+      const plus=el("button","icon-btn","+"); plus.title="Aumentar duracion"; plus.onclick=(e)=>{ e.stopPropagation(); doResize(5); };
+      const minus=el("button","icon-btn","−"); minus.title="Reducir duracion"; minus.onclick=(e)=>{ e.stopPropagation(); doResize(-5); };
+      timeAdjust.appendChild(plus); timeAdjust.appendChild(minus);
+      const timeDisplay=el("div","time-display");
+      timeDisplay.appendChild(range); timeDisplay.appendChild(timeAdjust);
+      header.appendChild(bSel); header.appendChild(bDel); header.appendChild(timeDisplay);
+      sel.appendChild(header);
 
+      const durationHint=el("div","duration-hint","Duración: "+String(s.endMin-s.startMin)+" min");
+      const timeTools=el("div","time-tools");
+      timeTools.appendChild(durationHint);
+      const linkHints=el("div","link-hints");
+      const formatSessionLabel=(info,fallback)=> info? `${info.pid} · #${info.index+1}` : (fallback? `#${fallback}` : "#?");
+      const selfInfo={pid,index:idx,session:s};
+      const addLinkHint=(label,text,onRemove,extra=[])=>{
+        const wrap=el("div","duration-hint link-hint");
+        wrap.appendChild(el("span",null,`${label}: ${text}`));
+        extra.forEach(btn=>wrap.appendChild(btn));
+        const close=el("button","btn danger small","✕"); close.title="Quitar vinculo"; close.onclick=(e)=>{ e.stopPropagation(); onRemove(); };
+        wrap.appendChild(close);
+        linkHints.appendChild(wrap);
+      };
+      if(s.prevId){
+        const other=findSessionById(s.prevId);
+        if(s.linkPrevRole==="pre-main"){
+          addLinkHint("Vinculación PRE", `${formatSessionLabel(other,s.prevId)} → ${formatSessionLabel(selfInfo,s.id)}`, ()=>{ clearPrevLink(s.id); renderClient(); });
+        }else if(s.linkPrevRole==="pre-target"){
+          addLinkHint("Vinculación PRE", `${formatSessionLabel(selfInfo,s.id)} → ${formatSessionLabel(other,s.prevId)}`, ()=>{ clearPostLink(s.prevId); renderClient(); });
+        }
+      }
+      if(s.nextId){
+        const other=findSessionById(s.nextId);
+        if(s.linkNextRole==="post-main"){
+          addLinkHint("Vinculación POST", `${formatSessionLabel(selfInfo,s.id)} → ${formatSessionLabel(other,s.nextId)}`, ()=>{ clearPostLink(s.id); renderClient(); });
+        }else if(s.linkNextRole==="post-target"){
+          const extras=[];
+          if(s.taskTypeId===TASK_MONTAGE){
+            const r=el("button","icon-btn ghost","⟳"); r.title="Re-sincronizar materiales del principal"; r.onclick=(e)=>{ e.stopPropagation(); resyncPrevMaterials(s.id); renderClient(); }; extras.push(r);
+          }
+          addLinkHint("Vinculación POST", `${formatSessionLabel(other,s.nextId)} → ${formatSessionLabel(selfInfo,s.id)}`, ()=>{ clearPrevLink(s.nextId); renderClient(); }, extras);
+        }
+      }
+      if(linkHints.childElementCount) timeTools.appendChild(linkHints);
+      sel.appendChild(timeTools);
 
-// Duración
-const ddiv=el("div","param duration-cell");
-ddiv.innerHTML="<label>Duracion (min)</label>";
-const din=el("input","input");
-din.type="number"; din.min="5"; din.step="5";
-din.value=String((s.endMin-s.startMin));
-const doResize=(delta)=>{
-  const cur=(s.endMin-s.startMin);
-  const nd=Math.max(5, Math.round((cur+delta)/5)*5);
-  resizeSegment(pid, idx, nd);
-  renderVerticalEditor(container,pid);
-};
-din.onchange=()=>{ const v=Math.max(5,Math.round((parseInt(din.value||"15",10)||15)/5)*5); resizeSegment(pid,idx,v); renderVerticalEditor(container,pid); };
-const box=el("span","time-adjust");
-const up=el("button","btn small","▲"); up.onclick=(e)=>{ e.stopPropagation(); doResize(5); };
-const dn=el("button","btn small","▼"); dn.onclick=(e)=>{ e.stopPropagation(); doResize(-5); };
-box.appendChild(up); box.appendChild(dn);
-ddiv.appendChild(din); ddiv.appendChild(box);
-row.appendChild(ddiv);
+      const linkWrap=el("div","link-controls under-slot");
+      const bPrev=el("button","icon-btn ghost","◀"); bPrev.title="Vincular PRE"; bPrev.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="prev"; linkMode.sourceId=s.id; renderClient(); };
+      const bPost=el("button","icon-btn ghost","▶"); bPost.title="Vincular POST"; bPost.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="post"; linkMode.sourceId=s.id; renderClient(); };
+      linkWrap.appendChild(bPrev); linkWrap.appendChild(bPost);
+      sel.appendChild(linkWrap);
+      row.appendChild(sel);
 
-      // Tarea
       const tdiv=el("div","param task-cell"); tdiv.innerHTML="<label>Tarea</label>";
       const tsel=el("select","input"); const t0=el("option",null,"- seleccionar -"); t0.value=""; tsel.appendChild(t0);
       const allowMont=!!s.nextId; const allowDesm=!!s.prevId;
@@ -118,7 +149,6 @@ row.appendChild(ddiv);
       };
       tdiv.appendChild(tsel); row.appendChild(tdiv);
 
-      // Localización (bloqueada salvo primera o transporte)
       const ldiv=el("div","param location-cell");
       if(idx===0 && s.taskTypeId!==TASK_TRANSP){
         ldiv.innerHTML="<label>Localizacion inicial</label>";
@@ -132,13 +162,17 @@ row.appendChild(ddiv);
         state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===s.locationId) o.selected=true; lsel.appendChild(o); });
         lsel.onchange=()=>{ s.locationId=lsel.value||null; recomputeLocations(pid); touch(); renderVerticalEditor(container,pid); };
         ldiv.appendChild(lsel);
+        const flow=computeTransportFlow(idx);
+        const originName=state.locations.find(x=>x.id===flow.origin)?.nombre || "-";
+        const destName=state.locations.find(x=>x.id===flow.destination)?.nombre || "-";
+        const flowText=`Origen → ${originName} · Destino → ${destName}`;
+        ldiv.appendChild(el("div","duration-hint transport-flow",flowText));
       }else{
         const name=state.locations.find(x=>x.id===s.locationId)?.nombre || "-";
         ldiv.appendChild(lockChip(name));
       }
       row.appendChild(ldiv);
 
-      // Vehiculo (solo Transporte)
       const vdiv=el("div","param vehicle-cell"); vdiv.innerHTML="<label>Vehiculo</label>";
       if(s.taskTypeId===TASK_TRANSP){
         const vsel=el("select","input"); const v0=el("option",null,"- seleccionar -"); v0.value=""; vsel.appendChild(v0);
@@ -149,33 +183,14 @@ row.appendChild(ddiv);
       }else vdiv.appendChild(lockChip("No aplica"));
       row.appendChild(vdiv);
 
-      // Materiales + Vínculos
-      const mdiv=el("div","param materials-cell"); mdiv.innerHTML="<label>Materiales</label>";
-      const bar=el("div","row");
-      const bPrev=el("button","btn small","◀ Vincular PRE"); bPrev.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="prev"; linkMode.sourceId=s.id; renderClient(); };
-      const bPost=el("button","btn small","Vincular POST ▶"); bPost.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="post"; linkMode.sourceId=s.id; renderClient(); };
-      bar.appendChild(bPrev); bar.appendChild(bPost); mdiv.appendChild(bar);
-
-      const chips=el("div","mini");
-      if(s.prevId){
-        const info=findSessionById(s.prevId); const tag=info? ("Previo: "+info.pid+" · #"+(info.index+1)) : ("Previo: "+s.prevId);
-        chips.appendChild(el("span",null,tag+" "));
-        const x=el("button","btn danger small","✕"); x.onclick=(e)=>{ e.stopPropagation(); clearPrevLink(s.id); renderClient(); }; chips.appendChild(x);
-      }
-      if(s.nextId){
-        const info=findSessionById(s.nextId); const tag=info? ("Post: "+info.pid+" · #"+(info.index+1)) : ("Post: "+s.nextId);
-        chips.appendChild(el("span",null," "+tag+" "));
-        const x=el("button","btn danger small","✕"); x.onclick=(e)=>{ e.stopPropagation(); clearPostLink(s.id); renderClient(); }; chips.appendChild(x);
-        // si soy PRE Montaje, permitir resync
-        if(s.taskTypeId===TASK_MONTAGE){
-          const r=el("button","btn small","⟳"); r.title="Re-sincronizar materiales del principal"; r.onclick=(e)=>{ e.stopPropagation(); resyncPrevMaterials(s.id); renderClient(); }; chips.appendChild(r);
-        }
-      }
-      if(s.prevId||s.nextId) mdiv.appendChild(chips);
+      const mdiv=el("div","param materials-cell");
+      const mheader=el("div","materials-header");
+      const mlabel=el("label",null,"Materiales");
+      mheader.appendChild(mlabel); mdiv.appendChild(mheader);
 
       const selected = (getSelected(pid)===idx);
       if(selected){
-        const add=el("div","row");
+        const add=el("div","materials-add");
         const msel=el("select","input"); const m0=el("option",null, state.materialTypes.length? "- seleccionar -" : "No hay materiales (usar Catalogo)"); m0.value=""; msel.appendChild(m0);
         state.materialTypes.forEach(m=>{ if(!(s.materiales||[]).some(x=>x.materialTypeId===m.id)){ const o=el("option",null,m.nombre); o.value=m.id; msel.appendChild(o); } });
         const q=el("input","input"); q.type="number"; q.min="0"; q.step="1"; q.placeholder="1";
@@ -198,31 +213,31 @@ row.appendChild(ddiv);
           const tr=el("tr");
           tr.appendChild(el("td",null, state.materialTypes.find(mt=>mt.id===m.materialTypeId)?.nombre || "Material"));
           tr.appendChild(el("td","qty", String(parseInt(m.cantidad||"0",10)||0)));
-          const act=el("td","act"); const p=el("button","iconbtn","+"); p.onclick=(e)=>{ e.stopPropagation(); inc(m.materialTypeId); };
-          const r=el("button","iconbtn","-"); r.onclick=(e)=>{ e.stopPropagation(); dec(m.materialTypeId); };
-          const d=el("button","iconbtn","Eliminar"); d.onclick=(e)=>{ e.stopPropagation(); del(m.materialTypeId); };
+          const act=el("td","act");
+          const p=el("button","icon-btn ghost","+"); p.title="Sumar"; p.onclick=(e)=>{ e.stopPropagation(); inc(m.materialTypeId); };
+          const r=el("button","icon-btn ghost","−"); r.title="Restar"; r.onclick=(e)=>{ e.stopPropagation(); dec(m.materialTypeId); };
+          const d=el("button","icon-btn danger","✕"); d.title="Eliminar"; d.onclick=(e)=>{ e.stopPropagation(); del(m.materialTypeId); };
           act.appendChild(p); act.appendChild(r); act.appendChild(d); tr.appendChild(act); tb.appendChild(tr);
         });
         if(!(s.materiales||[]).length){ const tr=el("tr"); const td=el("td"); td.colSpan=3; td.textContent="Sin materiales"; tr.appendChild(td); tb.appendChild(tr); }
         tbl.appendChild(tb); mdiv.appendChild(tbl);
       }else{
         const txt=(s.materiales||[]).map(m=> (state.materialTypes.find(mt=>mt.id===m.materialTypeId)?.nombre||"Material")+" x "+(parseInt(m.cantidad||"0",10)||0)).join(", ");
-        mdiv.appendChild(el("div","mini", txt||"Sin materiales"));
+        mdiv.appendChild(el("div","materials-summary", txt||"Sin materiales"));
       }
       row.appendChild(mdiv);
 
-      // Notas
-      const ndiv=el("div","param notes-cell"); ndiv.innerHTML="<label>Notas</label>";
+      const ndiv=el("div","param notes-cell");
+      const nlabel=el("label",null,"Notas");
       const ta=el("textarea","input"); ta.rows=3; ta.value=String(s.comentario||""); ta.placeholder="Comentarios de la accion";
       ta.oninput=()=>{ s.comentario=ta.value; touch(); autoGrow(ta); };
-      setTimeout(()=>autoGrow(ta),0); ndiv.appendChild(ta); row.appendChild(ndiv);
+      setTimeout(()=>autoGrow(ta),0); ndiv.appendChild(nlabel); ndiv.appendChild(ta); row.appendChild(ndiv);
 
       container.appendChild(row);
     });
 
     document.onkeydown=(e)=>{ if(e.key==="Escape" && linkMode.active){ linkMode.active=false; renderClient(); } };
   };
-
   // Render de vista completo (toolbar mínima incluida)
   window.renderClient = ()=>{
     const pid = (state.project.view.lastTab==="CLIENTE" || !state.project.view.lastTab)? "CLIENTE" : state.project.view.lastTab;

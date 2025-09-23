@@ -58,7 +58,6 @@
   };
 
   // Vínculos
-  const isEmptyTask = (s)=> !s.taskTypeId;
   window.ensureLinkFields = ()=>{
     personIds().forEach(pid=>{
       getPersonSessions(pid).forEach(s=>{
@@ -66,7 +65,32 @@
         if(typeof s.prevId==="undefined") s.prevId=null;
         if(typeof s.nextId==="undefined") s.nextId=null;
         if(typeof s.inheritFromId==="undefined") s.inheritFromId=null;
+        if(typeof s.linkPrevRole==="undefined") s.linkPrevRole=null;
+        if(typeof s.linkNextRole==="undefined") s.linkNextRole=null;
         s.materiales=s.materiales||[];
+      });
+    });
+    personIds().forEach(pid=>{
+      getPersonSessions(pid).forEach(s=>{
+        if(s.prevId){
+          const prev=findSessionById(s.prevId);
+          if(prev && prev.session && prev.session.nextId===s.id && prev.session.inheritFromId===s.id){
+            s.linkPrevRole="pre-main";
+          }else{
+            s.linkPrevRole="pre-target";
+          }
+        }else{
+          s.linkPrevRole=null;
+        }
+        if(s.nextId){
+          if(s.inheritFromId && s.inheritFromId===s.nextId){
+            s.linkNextRole="post-target";
+          }else{
+            s.linkNextRole="post-main";
+          }
+        }else{
+          s.linkNextRole=null;
+        }
       });
     });
   };
@@ -88,7 +112,6 @@
     const A=findSessionById(mainId), B=findSessionById(dstId); if(!A||!B) return {ok:false,msg:"No encontrado"};
     const m=A.session, d=B.session;
     if(m.prevId) return {ok:false,msg:"La accion ya tiene PRE"};
-    if(!isEmptyTask(d)) return {ok:false,msg:"Destino debe estar vacio"};
     if(d.prevId||d.nextId) return {ok:false,msg:"Destino ya vinculado"};
     return {ok:true};
   };
@@ -96,7 +119,6 @@
     const A=findSessionById(mainId), B=findSessionById(dstId); if(!A||!B) return {ok:false,msg:"No encontrado"};
     const m=A.session, d=B.session;
     if(m.nextId) return {ok:false,msg:"La accion ya tiene POST"};
-    if(!isEmptyTask(d)) return {ok:false,msg:"Destino debe estar vacio"};
     if(d.prevId||d.nextId) return {ok:false,msg:"Destino ya vinculado"};
     return {ok:true};
   };
@@ -105,6 +127,7 @@
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
     d.taskTypeId = TASK_MONTAGE; d.materiales = (m.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)}));
     d.inheritFromId = m.id; m.prevId = d.id; d.nextId = m.id;
+    m.linkPrevRole="pre-main"; d.linkNextRole="post-target";
     const msg=formatLinkMessage("prev", findSessionById(mainId), findSessionById(dstId));
     touch(); return {ok:true,msg};
   };
@@ -113,20 +136,21 @@
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
     d.taskTypeId = TASK_DESMONT; d.materiales = []; d.inheritFromId=null;
     m.nextId = d.id; d.prevId = m.id;
+    m.linkNextRole="post-main"; d.linkPrevRole="pre-target";
     const msg=formatLinkMessage("post", findSessionById(mainId), findSessionById(dstId));
     touch(); return {ok:true,msg};
   };
   window.clearPrevLink = (mainId)=>{
     const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
     const m=A.session; const P=findSessionById(m.prevId);
-    if(P){ const s=P.session; if(s.taskTypeId===TASK_MONTAGE){ s.taskTypeId=null; s.materiales=[]; s.inheritFromId=null; } s.nextId=null; }
-    m.prevId=null; touch(); return {ok:true};
+    if(P){ const s=P.session; if(s.taskTypeId===TASK_MONTAGE){ s.taskTypeId=null; s.materiales=[]; s.inheritFromId=null; } s.nextId=null; s.linkNextRole=null; }
+    m.prevId=null; m.linkPrevRole=null; touch(); return {ok:true};
   };
   window.clearPostLink = (mainId)=>{
     const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
     const m=A.session; const N=findSessionById(m.nextId);
-    if(N){ const s=N.session; if(s.taskTypeId===TASK_DESMONT){ s.taskTypeId=null; } s.prevId=null; }
-    m.nextId=null; touch(); return {ok:true};
+    if(N){ const s=N.session; if(s.taskTypeId===TASK_DESMONT){ s.taskTypeId=null; } s.prevId=null; s.linkPrevRole=null; }
+    m.nextId=null; m.linkNextRole=null; touch(); return {ok:true};
   };
   window.resyncPrevMaterials = (montajeId)=>{
     const M=findSessionById(montajeId); if(!M) return {ok:false,msg:"No encontrado"};

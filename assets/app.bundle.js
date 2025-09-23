@@ -150,7 +150,6 @@
   };
 
   // Vínculos
-  const isEmptyTask = (s)=> !s.taskTypeId;
   window.ensureLinkFields = ()=>{
     personIds().forEach(pid=>{
       getPersonSessions(pid).forEach(s=>{
@@ -158,7 +157,28 @@
         if(typeof s.prevId==="undefined") s.prevId=null;
         if(typeof s.nextId==="undefined") s.nextId=null;
         if(typeof s.inheritFromId==="undefined") s.inheritFromId=null;
+        if(typeof s.linkPrevRole==="undefined") s.linkPrevRole=null;
+        if(typeof s.linkNextRole==="undefined") s.linkNextRole=null;
         s.materiales=s.materiales||[];
+      });
+    });
+    personIds().forEach(pid=>{
+      getPersonSessions(pid).forEach(s=>{
+        if(s.prevId){
+          const prev=findSessionById(s.prevId);
+          if(prev && prev.session && prev.session.nextId===s.id && prev.session.inheritFromId===s.id){
+            s.linkPrevRole="pre-main";
+          }else{
+            s.linkPrevRole="pre-target";
+          }
+        }else s.linkPrevRole=null;
+        if(s.nextId){
+          if(s.inheritFromId && s.inheritFromId===s.nextId){
+            s.linkNextRole="post-target";
+          }else{
+            s.linkNextRole="post-main";
+          }
+        }else s.linkNextRole=null;
       });
     });
   };
@@ -180,7 +200,6 @@
     const A=findSessionById(mainId), B=findSessionById(dstId); if(!A||!B) return {ok:false,msg:"No encontrado"};
     const m=A.session, d=B.session;
     if(m.prevId) return {ok:false,msg:"La accion ya tiene PRE"};
-    if(!isEmptyTask(d)) return {ok:false,msg:"Destino debe estar vacio"};
     if(d.prevId||d.nextId) return {ok:false,msg:"Destino ya vinculado"};
     return {ok:true};
   };
@@ -188,7 +207,6 @@
     const A=findSessionById(mainId), B=findSessionById(dstId); if(!A||!B) return {ok:false,msg:"No encontrado"};
     const m=A.session, d=B.session;
     if(m.nextId) return {ok:false,msg:"La accion ya tiene POST"};
-    if(!isEmptyTask(d)) return {ok:false,msg:"Destino debe estar vacio"};
     if(d.prevId||d.nextId) return {ok:false,msg:"Destino ya vinculado"};
     return {ok:true};
   };
@@ -197,6 +215,7 @@
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
     d.taskTypeId = TASK_MONTAGE; d.materiales = (m.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)}));
     d.inheritFromId = m.id; m.prevId = d.id; d.nextId = m.id;
+    m.linkPrevRole="pre-main"; d.linkNextRole="post-target";
     const msg=formatLinkMessage("prev", findSessionById(mainId), findSessionById(dstId));
     touch(); return {ok:true,msg};
   };
@@ -205,20 +224,21 @@
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
     d.taskTypeId = TASK_DESMONT; d.materiales = []; d.inheritFromId=null;
     m.nextId = d.id; d.prevId = m.id;
+    m.linkNextRole="post-main"; d.linkPrevRole="pre-target";
     const msg=formatLinkMessage("post", findSessionById(mainId), findSessionById(dstId));
     touch(); return {ok:true,msg};
   };
   window.clearPrevLink = (mainId)=>{
     const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
     const m=A.session; const P=findSessionById(m.prevId);
-    if(P){ const s=P.session; if(s.taskTypeId===TASK_MONTAGE){ s.taskTypeId=null; s.materiales=[]; s.inheritFromId=null; } s.nextId=null; }
-    m.prevId=null; touch(); return {ok:true};
+    if(P){ const s=P.session; if(s.taskTypeId===TASK_MONTAGE){ s.taskTypeId=null; s.materiales=[]; s.inheritFromId=null; } s.nextId=null; s.linkNextRole=null; }
+    m.prevId=null; m.linkPrevRole=null; touch(); return {ok:true};
   };
   window.clearPostLink = (mainId)=>{
     const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
     const m=A.session; const N=findSessionById(m.nextId);
-    if(N){ const s=N.session; if(s.taskTypeId===TASK_DESMONT){ s.taskTypeId=null; } s.prevId=null; }
-    m.nextId=null; touch(); return {ok:true};
+    if(N){ const s=N.session; if(s.taskTypeId===TASK_DESMONT){ s.taskTypeId=null; } s.prevId=null; s.linkPrevRole=null; }
+    m.nextId=null; m.linkNextRole=null; touch(); return {ok:true};
   };
   window.resyncPrevMaterials = (montajeId)=>{
     const M=findSessionById(montajeId); if(!M) return {ok:false,msg:"No encontrado"};
@@ -325,6 +345,28 @@
     const list=getPersonSessions(pid);
     if(!list.length){ container.appendChild(el("div","mini","No hay acciones.")); return; }
 
+    const computeTransportFlow=(targetIdx)=>{
+      let cur=null;
+      for(let i=0;i<list.length;i++){
+        const item=list[i];
+        if(i===targetIdx){
+          return {origin:cur,destination:item.locationId||cur};
+        }
+        if(i===0 && item.taskTypeId!==TASK_TRANSP){
+          cur=item.locationId||cur;
+          continue;
+        }
+        if(item.taskTypeId===TASK_TRANSP){
+          const dest=item.locationId||cur;
+          cur=dest;
+        }else{
+          cur=item.locationId||cur;
+        }
+      }
+      const fallback=list[targetIdx];
+      return {origin:cur,destination:fallback?.locationId||cur};
+    };
+
     list.forEach((s,idx)=>{
       const row=el("div","vrow"); if(getSelected(pid)===idx) row.classList.add("selected");
 
@@ -332,7 +374,6 @@
       if(linkMode.active){
         row.classList.add("canlink");
         row.onclick=()=>{
-          if(s.taskTypeId){ alert("Destino debe estar vacio"); return; }
           let result;
           if(linkMode.kind==="prev"){ result=setPrevLink(linkMode.sourceId,s.id); }
           else { result=setPostLink(linkMode.sourceId,s.id); }
@@ -348,10 +389,7 @@
       const bSel=el("button","btn chip",String(idx+1)); bSel.title="Seleccionar"; bSel.onclick=(e)=>{ e.stopPropagation(); setSelected(pid,idx); renderVerticalEditor(container,pid); };
       const bDel=el("button","btn danger icon","✕"); bDel.title="Eliminar"; bDel.onclick=(e)=>{ e.stopPropagation(); deleteAtIndex(pid,idx); renderVerticalEditor(container,pid); };
       const range=el("span","time-range", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
-      header.appendChild(bSel); header.appendChild(bDel); header.appendChild(range);
-      sel.appendChild(header);
-
-      const controls=el("div","time-controls");
+      const timeAdjust=el("div","time-adjust");
       const doResize=(delta)=>{
         const cur=s.endMin-s.startMin;
         const target=Math.max(5, cur+delta);
@@ -360,12 +398,49 @@
         resizeSegment(pid, idx, nd);
         renderVerticalEditor(container,pid);
       };
-      const minus=el("button","icon-btn","−"); minus.title="Reducir duracion"; minus.onclick=(e)=>{ e.stopPropagation(); doResize(-5); };
       const plus=el("button","icon-btn","+"); plus.title="Aumentar duracion"; plus.onclick=(e)=>{ e.stopPropagation(); doResize(5); };
-      controls.appendChild(minus); controls.appendChild(plus);
+      const minus=el("button","icon-btn","−"); minus.title="Reducir duracion"; minus.onclick=(e)=>{ e.stopPropagation(); doResize(-5); };
+      timeAdjust.appendChild(plus); timeAdjust.appendChild(minus);
+      const timeDisplay=el("div","time-display");
+      timeDisplay.appendChild(range); timeDisplay.appendChild(timeAdjust);
+      header.appendChild(bSel); header.appendChild(bDel); header.appendChild(timeDisplay);
+      sel.appendChild(header);
+
       const durationHint=el("div","duration-hint","Duración: "+String(s.endMin-s.startMin)+" min");
       const timeTools=el("div","time-tools");
-      timeTools.appendChild(controls); timeTools.appendChild(durationHint);
+      timeTools.appendChild(durationHint);
+      const linkHints=el("div","link-hints");
+      const formatSessionLabel=(info,fallback)=> info? `${info.pid} · #${info.index+1}` : (fallback? `#${fallback}` : "#?");
+      const selfInfo={pid,index:idx,session:s};
+      const addLinkHint=(label,text,onRemove,extra=[])=>{
+        const wrap=el("div","duration-hint link-hint");
+        wrap.appendChild(el("span",null,`${label}: ${text}`));
+        extra.forEach(btn=>wrap.appendChild(btn));
+        const close=el("button","btn danger small","✕"); close.title="Quitar vinculo"; close.onclick=(e)=>{ e.stopPropagation(); onRemove(); };
+        wrap.appendChild(close);
+        linkHints.appendChild(wrap);
+      };
+      if(s.prevId){
+        const other=findSessionById(s.prevId);
+        if(s.linkPrevRole==="pre-main"){
+          addLinkHint("Vinculación PRE", `${formatSessionLabel(other,s.prevId)} → ${formatSessionLabel(selfInfo,s.id)}`, ()=>{ clearPrevLink(s.id); renderClient(); });
+        }else if(s.linkPrevRole==="pre-target"){
+          addLinkHint("Vinculación PRE", `${formatSessionLabel(selfInfo,s.id)} → ${formatSessionLabel(other,s.prevId)}`, ()=>{ clearPostLink(s.prevId); renderClient(); });
+        }
+      }
+      if(s.nextId){
+        const other=findSessionById(s.nextId);
+        if(s.linkNextRole==="post-main"){
+          addLinkHint("Vinculación POST", `${formatSessionLabel(selfInfo,s.id)} → ${formatSessionLabel(other,s.nextId)}`, ()=>{ clearPostLink(s.id); renderClient(); });
+        }else if(s.linkNextRole==="post-target"){
+          const extras=[];
+          if(s.taskTypeId===TASK_MONTAGE){
+            const r=el("button","icon-btn ghost","⟳"); r.title="Re-sincronizar materiales del principal"; r.onclick=(e)=>{ e.stopPropagation(); resyncPrevMaterials(s.id); renderClient(); }; extras.push(r);
+          }
+          addLinkHint("Vinculación POST", `${formatSessionLabel(other,s.nextId)} → ${formatSessionLabel(selfInfo,s.id)}`, ()=>{ clearPrevLink(s.nextId); renderClient(); }, extras);
+        }
+      }
+      if(linkHints.childElementCount) timeTools.appendChild(linkHints);
       sel.appendChild(timeTools);
 
       const linkWrap=el("div","link-controls under-slot");
@@ -416,6 +491,11 @@
         state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===s.locationId) o.selected=true; lsel.appendChild(o); });
         lsel.onchange=()=>{ s.locationId=lsel.value||null; recomputeLocations(pid); touch(); renderVerticalEditor(container,pid); };
         ldiv.appendChild(lsel);
+        const flow=computeTransportFlow(idx);
+        const originName=state.locations.find(x=>x.id===flow.origin)?.nombre || "-";
+        const destName=state.locations.find(x=>x.id===flow.destination)?.nombre || "-";
+        const flowText=`Origen → ${originName} · Destino → ${destName}`;
+        ldiv.appendChild(el("div","duration-hint transport-flow",flowText));
       }else{
         const name=state.locations.find(x=>x.id===s.locationId)?.nombre || "-";
         ldiv.appendChild(lockChip(name));
@@ -438,23 +518,6 @@
       const mheader=el("div","materials-header");
       const mlabel=el("label",null,"Materiales");
       mheader.appendChild(mlabel); mdiv.appendChild(mheader);
-
-      const chips=el("div","link-tags");
-      if(s.prevId){
-        const info=findSessionById(s.prevId); const tag=info? ("Previo: "+info.pid+" · #"+(info.index+1)) : ("Previo: "+s.prevId);
-        chips.appendChild(el("span","link-tag",tag));
-        const x=el("button","icon-btn danger","✕"); x.title="Quitar vinculo PRE"; x.onclick=(e)=>{ e.stopPropagation(); clearPrevLink(s.id); renderClient(); }; chips.appendChild(x);
-      }
-      if(s.nextId){
-        const info=findSessionById(s.nextId); const tag=info? ("Post: "+info.pid+" · #"+(info.index+1)) : ("Post: "+s.nextId);
-        chips.appendChild(el("span","link-tag",tag));
-        const x=el("button","icon-btn danger","✕"); x.title="Quitar vinculo POST"; x.onclick=(e)=>{ e.stopPropagation(); clearPostLink(s.id); renderClient(); }; chips.appendChild(x);
-        // si soy PRE Montaje, permitir resync
-        if(s.taskTypeId===TASK_MONTAGE){
-          const r=el("button","icon-btn ghost","⟳"); r.title="Re-sincronizar materiales del principal"; r.onclick=(e)=>{ e.stopPropagation(); resyncPrevMaterials(s.id); renderClient(); }; chips.appendChild(r);
-        }
-      }
-      if(s.prevId||s.nextId) mdiv.appendChild(chips);
 
       const selected = (getSelected(pid)===idx);
       if(selected){
