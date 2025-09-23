@@ -18,6 +18,13 @@
     if(linkMode.active) banner(container);
 
     const list=getPersonSessions(pid);
+    const first=list[0];
+    if(first && first.taskTypeId===TASK_TRANSP){
+      first.taskTypeId=null;
+      first.vehicleId=null;
+      recomputeLocations(pid);
+      touch();
+    }
     if(!list.length){ container.appendChild(el("div","mini","No hay acciones.")); return; }
 
     const computeTransportFlow=(targetIdx)=>{
@@ -75,13 +82,15 @@
       const minus=el("button","icon-btn","−"); minus.title="Reducir duracion"; minus.onclick=(e)=>{ e.stopPropagation(); doResize(-5); };
       timeAdjust.appendChild(plus); timeAdjust.appendChild(minus);
       const timeDisplay=el("div","time-display");
-      timeDisplay.appendChild(range); timeDisplay.appendChild(timeAdjust);
+      const timeMain=el("div","time-main");
+      timeMain.appendChild(range); timeMain.appendChild(timeAdjust);
+      timeDisplay.appendChild(timeMain);
+      const durationHint=el("div","duration-hint","Duración: "+String(s.endMin-s.startMin)+" min");
+      timeDisplay.appendChild(durationHint);
       header.appendChild(bSel); header.appendChild(bDel); header.appendChild(timeDisplay);
       sel.appendChild(header);
 
-      const durationHint=el("div","duration-hint","Duración: "+String(s.endMin-s.startMin)+" min");
       const timeTools=el("div","time-tools");
-      timeTools.appendChild(durationHint);
       const linkHints=el("div","link-hints");
       const formatSessionLabel=(info,fallback)=> info? `${info.pid} · #${info.index+1}` : (fallback? `#${fallback}` : "#?");
       const selfInfo={pid,index:idx,session:s};
@@ -113,8 +122,10 @@
           addLinkHint("Vinculación POST", `${formatSessionLabel(other,s.nextId)} → ${formatSessionLabel(selfInfo,s.id)}`, ()=>{ clearPrevLink(s.nextId); renderClient(); }, extras);
         }
       }
-      if(linkHints.childElementCount) timeTools.appendChild(linkHints);
-      sel.appendChild(timeTools);
+      if(linkHints.childElementCount){
+        timeTools.appendChild(linkHints);
+        sel.appendChild(timeTools);
+      }
 
       const linkWrap=el("div","link-controls under-slot");
       const bPrev=el("button","icon-btn ghost","◀"); bPrev.title="Vincular PRE"; bPrev.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="prev"; linkMode.sourceId=s.id; renderClient(); };
@@ -130,6 +141,7 @@
         const isM=t.id===TASK_MONTAGE, isD=t.id===TASK_DESMONT;
         if(isM && !allowMont) return;
         if(isD && !allowDesm) return;
+        if(idx===0 && t.id===TASK_TRANSP) return;
         const o=el("option",null,t.nombre); o.value=t.id; if(t.id===s.taskTypeId) o.selected=true; tsel.appendChild(o);
       });
       tsel.onchange=()=>{
@@ -157,6 +169,7 @@
         lsel.onchange=()=>{ s.locationId=lsel.value||null; recomputeLocations(pid); touch(); renderVerticalEditor(container,pid); };
         ldiv.appendChild(lsel);
       }else if(s.taskTypeId===TASK_TRANSP){
+        ldiv.classList.add("stacked");
         ldiv.innerHTML="<label>Destino</label>";
         const lsel=el("select","input"); const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
         state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===s.locationId) o.selected=true; lsel.appendChild(o); });
