@@ -30,7 +30,7 @@
     root.state = {
       project:{ nombre:"Proyecto", fecha:"", tz:"Europe/Madrid", updatedAt:"", view:{ lastTab:"CLIENTE", subGantt:"Gantt", selectedIndex:{} } },
       locations:[], taskTypes:[], materialTypes:[], vehicles:[], staff:[],
-      sessions:{ CLIENTE:[] }, horaInicial:{}
+      sessions:{ CLIENTE:[] }, horaInicial:{}, localizacionInicial:{}
     };
   }
   // Autosave
@@ -54,10 +54,17 @@
   window.ensureDefaults = ()=>{
     const st=state;
     st.taskTypes=st.taskTypes||[]; st.locations=st.locations||[]; st.materialTypes=st.materialTypes||[];
-    st.vehicles=st.vehicles||[]; st.staff=st.staff||[]; st.sessions=st.sessions||{CLIENTE:[]}; st.horaInicial=st.horaInicial||{};
+    st.vehicles=st.vehicles||[]; st.staff=st.staff||[]; st.sessions=st.sessions||{CLIENTE:[]};
+    st.horaInicial=st.horaInicial||{}; st.localizacionInicial=st.localizacionInicial||{};
     st.project=st.project||{nombre:"Proyecto",fecha:"",tz:"Europe/Madrid",updatedAt:"",view:{}}; st.project.view=st.project.view||{};
     st.project.view.lastTab=st.project.view.lastTab||"CLIENTE"; st.project.view.subGantt=st.project.view.subGantt||"Gantt"; st.project.view.selectedIndex=st.project.view.selectedIndex||{};
     if(!st.sessions.CLIENTE) st.sessions.CLIENTE=[];
+    Object.keys(st.sessions).forEach(pid=>{
+      const list=st.sessions[pid]||[];
+      if(list.length && typeof st.localizacionInicial[pid]==="undefined"){
+        st.localizacionInicial[pid]=list[0]?.locationId||null;
+      }
+    });
     try{ ensureSeedsCore(); }catch(e){}
   };
 
@@ -108,10 +115,16 @@
     }
   }
   window.addAfterIndex = (pid, idx, durMin)=>{
-    const list=getPersonSessions(pid); const d=Math.max(5,Math.round((parseInt(durMin||15,10)||15)/5)*5);
+    const list=getPersonSessions(pid); const wasEmpty=!list.length;
+    const d=Math.max(5,Math.round((parseInt(durMin||15,10)||15)/5)*5);
     const start = (idx!=null && idx>=0 && list[idx]) ? list[idx].endMin : (list.length? list[list.length-1].endMin : (state.horaInicial?.[pid]??9*60));
-    const s={ id:"S_"+(++__S_SEQ), startMin:start, endMin:start+d, taskTypeId:null, locationId:null, vehicleId:null, materiales:[], comentario:"", prevId:null, nextId:null, inheritFromId:null };
+    const initialLoc = wasEmpty ? (state.localizacionInicial?.[pid] ?? null) : null;
+    const s={ id:"S_"+(++__S_SEQ), startMin:start, endMin:start+d, taskTypeId:null, locationId:initialLoc, vehicleId:null, materiales:[], comentario:"", prevId:null, nextId:null, inheritFromId:null };
     list.splice((idx!=null && idx>=0)? idx+1 : list.length, 0, s);
+    if(wasEmpty){
+      state.localizacionInicial=state.localizacionInicial||{};
+      state.localizacionInicial[pid]=s.locationId||null;
+    }
     reflow(pid); recomputeLocations(pid); touch();
   };
   window.deleteAtIndex = (pid, idx)=>{
@@ -495,7 +508,11 @@
         ldiv.innerHTML="<label>Localizacion inicial</label>";
         const lsel=el("select","input"); const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
         state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===s.locationId) o.selected=true; lsel.appendChild(o); });
-        lsel.onchange=()=>{ s.locationId=lsel.value||null; recomputeLocations(pid); touch(); renderVerticalEditor(container,pid); };
+        lsel.onchange=()=>{ s.locationId=lsel.value||null; recomputeLocations(pid);
+          state.localizacionInicial=state.localizacionInicial||{};
+          state.localizacionInicial[pid]=s.locationId||null;
+          touch(); renderVerticalEditor(container,pid);
+        };
         ldiv.appendChild(lsel);
       }else if(s.taskTypeId===TASK_TRANSP){
         ldiv.classList.add("stacked");
@@ -591,13 +608,37 @@
     const pid = (state.project.view.lastTab==="CLIENTE" || !state.project.view.lastTab)? "CLIENTE" : state.project.view.lastTab;
     const root=$("#clienteView"); if(!root) return;
     root.innerHTML="";
+    const sessions=getPersonSessions(pid);
+    state.localizacionInicial=state.localizacionInicial||{};
     const bar=el("div","toolbar");
-    const lbl=el("span","mini","Hora inicio"); const ti=el("input","input"); ti.type="time";
-    ti.value = toHHMM(state.horaInicial?.[pid] ?? 9*60);
-    ti.onchange=()=>{ state.horaInicial[pid]=toMin(ti.value||"09:00"); rebaseTo(pid,state.horaInicial[pid]); renderClient(); };
+    if(!sessions.length){
+      const lbl=el("span","mini","Hora inicio");
+      const ti=el("input","input"); ti.type="time";
+      ti.value = toHHMM(state.horaInicial?.[pid] ?? 9*60);
+      ti.onchange=()=>{
+        state.horaInicial[pid]=toMin(ti.value||"09:00");
+        if(sessions.length){
+          rebaseTo(pid,state.horaInicial[pid]);
+        }else{
+          touch();
+        }
+        renderClient();
+      };
+      const lloc=el("span","mini","Localizacion inicio");
+      const lsel=el("select","input");
+      const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
+      const initialLoc=state.localizacionInicial?.[pid] ?? null;
+      state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===initialLoc) o.selected=true; lsel.appendChild(o); });
+      lsel.onchange=()=>{
+        state.localizacionInicial[pid]=lsel.value||null;
+        touch();
+        renderClient();
+      };
+      bar.appendChild(lbl); bar.appendChild(ti); bar.appendChild(lloc); bar.appendChild(lsel);
+    }
     const add=el("button","btn primary","Crear accion");
     add.onclick=()=>{ const idx=getSelected(pid); addAfterIndex(pid, (idx==null? -1: idx), 15); renderClient(); };
-    bar.appendChild(lbl); bar.appendChild(ti); bar.appendChild(add); root.appendChild(bar);
+    bar.appendChild(add); root.appendChild(bar);
 
     const v=el("div","vlist"); root.appendChild(v);
     renderVerticalEditor(v,pid);
