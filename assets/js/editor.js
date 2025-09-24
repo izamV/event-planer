@@ -67,7 +67,7 @@
       const sel=el("div","selcell");
       const header=el("div","slot-index");
       const bSel=el("button","btn chip",String(idx+1)); bSel.title="Seleccionar"; bSel.onclick=(e)=>{ e.stopPropagation(); setSelected(pid,idx); renderVerticalEditor(container,pid); };
-      const bDel=el("button","btn danger icon","✕"); bDel.title="Eliminar"; bDel.onclick=(e)=>{ e.stopPropagation(); deleteAtIndex(pid,idx); renderVerticalEditor(container,pid); };
+      const bDel=el("button","btn danger icon","✕"); bDel.title="Eliminar"; bDel.onclick=(e)=>{ e.stopPropagation(); deleteAtIndex(pid,idx); renderClient(); };
       const range=el("span","time-range", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
       const timeAdjust=el("div","time-adjust");
       const doResize=(delta)=>{
@@ -164,14 +164,8 @@
       const ldiv=el("div","param location-cell");
       if(idx===0 && s.taskTypeId!==TASK_TRANSP){
         ldiv.innerHTML="<label>Localizacion inicial</label>";
-        const lsel=el("select","input"); const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
-        state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===s.locationId) o.selected=true; lsel.appendChild(o); });
-        lsel.onchange=()=>{ s.locationId=lsel.value||null; recomputeLocations(pid);
-          state.localizacionInicial=state.localizacionInicial||{};
-          state.localizacionInicial[pid]=s.locationId||null;
-          touch(); renderVerticalEditor(container,pid);
-        };
-        ldiv.appendChild(lsel);
+        const name=state.locations.find(x=>x.id===s.locationId)?.nombre || "-";
+        ldiv.appendChild(lockChip(name));
       }else if(s.taskTypeId===TASK_TRANSP){
         ldiv.classList.add("stacked");
         ldiv.innerHTML="<label>Destino</label>";

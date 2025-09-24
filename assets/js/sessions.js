@@ -51,6 +51,8 @@
       const s=list[i];
       if(i===0 && s.taskTypeId!==TASK_TRANSP){
         cur = s.locationId || cur;
+        state.localizacionInicial=state.localizacionInicial||{};
+        state.localizacionInicial[pid]=cur||null;
         continue;
       }
       if(s.taskTypeId===TASK_TRANSP){
