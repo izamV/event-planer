@@ -6,6 +6,7 @@
   const MAX_ZOOM = 18;
   const DEFAULT_VIEW = { lat: 40.4168, lng: -3.7038, zoom: 12 };
   const SPEED_STEPS = [0.5, 1, 2, 4];
+  const ACTION_TYPE_TRANSPORT = window.ACTION_TYPE_TRANSPORT || "TRANSPORTE";
   const COLOR_PALETTE = [
     "#38bdf8", "#f472b6", "#34d399", "#f97316",
     "#c084fc", "#22d3ee", "#facc15", "#fb7185",
@@ -70,10 +71,14 @@
     return valid;
   };
 
+  const sessionLabel = (s)=>{
+    const catalogName = state.taskTypes?.find(t=>t.id===s.taskTypeId)?.nombre || "";
+    return (s.actionName||"").trim() || catalogName || "Sin tarea";
+  };
+
   const buildTimeline = (locations)=>{
     const locMap = new Map(locations.map(l=>[l.id, l]));
     const persons = [{ id:"CLIENTE", nombre:"Cliente" }, ...(state.staff||[])];
-    const taskNames = new Map((state.taskTypes||[]).map(t=>[t.id, t.nombre]));
     const tracks=[];
     let earliest=Infinity;
     let latest=-Infinity;
@@ -87,7 +92,7 @@
         const end=Number(s.endMin);
         if(!Number.isFinite(start) || !Number.isFinite(end) || end<=start) return;
         const dest = s.locationId ? locMap.get(s.locationId) : null;
-        const isTransport = (s.taskTypeId === TASK_TRANSP);
+        const isTransport = (s.actionType === ACTION_TYPE_TRANSPORT);
         let from = lastLoc || dest || null;
         let to = dest || from;
         if(isTransport){
@@ -109,7 +114,7 @@
             return;
           }
         }
-        const label = taskNames.get(s.taskTypeId) || "";
+        const label = sessionLabel(s);
         segments.push({ start, end, from, to, isTransport, session:s, label, location:dest });
         if(dest) lastLoc = dest;
         earliest = Math.min(earliest, start);
