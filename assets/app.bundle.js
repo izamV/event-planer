@@ -1229,7 +1229,7 @@
         }
       }
       const fallback=list[targetIdx];
-      return {origin:cur,destination=fallback?.locationId||cur};
+      return {origin:cur,destination:fallback?.locationId||cur};
     };
   
     list.forEach((s,idx)=>{
