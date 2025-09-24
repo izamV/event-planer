@@ -1,6 +1,8 @@
 ﻿(function(){
   "use strict";
   const root = window;
+  if(typeof root.ACTION_TYPE_TRANSPORT === "undefined") root.ACTION_TYPE_TRANSPORT = "TRANSPORTE";
+  if(typeof root.ACTION_TYPE_NORMAL === "undefined") root.ACTION_TYPE_NORMAL = "NORMAL";
   // Estado básico
   if(!root.state){
     root.state = {
@@ -30,6 +32,14 @@
   window.ensureDefaults = ()=>{
     const st=state;
     st.taskTypes=st.taskTypes||[]; st.locations=st.locations||[]; st.materialTypes=st.materialTypes||[];
+    st.taskTypes.forEach(t=>{
+      const isTransport=t.id===root.EP_IDS?.TRANSP;
+      if(typeof t.tipo==="undefined") t.tipo = isTransport?root.ACTION_TYPE_TRANSPORT:root.ACTION_TYPE_NORMAL;
+      if(typeof t.quien==="undefined") t.quien = t.locked?"SISTEMA":"CLIENTE";
+      if(!t.color){
+        t.color = t.tipo===root.ACTION_TYPE_TRANSPORT?"#22d3ee":"#60a5fa";
+      }
+    });
     st.vehicles=st.vehicles||[]; st.staff=st.staff||[]; st.sessions=st.sessions||{CLIENTE:[]};
     st.horaInicial=st.horaInicial||{}; st.localizacionInicial=st.localizacionInicial||{};
     st.project=st.project||{nombre:"Proyecto",fecha:"",tz:"Europe/Madrid",updatedAt:"",view:{}}; st.project.view=st.project.view||{};

@@ -1,5 +1,7 @@
 ﻿(function(){
   "use strict";
+  const ACTION_TYPE_TRANSPORT = window.ACTION_TYPE_TRANSPORT || "TRANSPORTE";
+  const ACTION_TYPE_NORMAL = window.ACTION_TYPE_NORMAL || "NORMAL";
   let __S_SEQ = 0;
   const personIds = ()=> ["CLIENTE",...(state.staff||[]).map(p=>p.id)];
   window.getPersonSessions = (pid)=>{ state.sessions[pid]=state.sessions[pid]||[]; return state.sessions[pid]; };
@@ -20,7 +22,7 @@
     const d=Math.max(5,Math.round((parseInt(durMin||15,10)||15)/5)*5);
     const start = (idx!=null && idx>=0 && list[idx]) ? list[idx].endMin : (list.length? list[list.length-1].endMin : (state.horaInicial?.[pid]??9*60));
     const initialLoc = wasEmpty ? (state.localizacionInicial?.[pid] ?? null) : null;
-    const s={ id:"S_"+(++__S_SEQ), startMin:start, endMin:start+d, taskTypeId:null, locationId:initialLoc, vehicleId:null, materiales:[], comentario:"", prevId:null, nextId:null, inheritFromId:null };
+    const s={ id:"S_"+(++__S_SEQ), startMin:start, endMin:start+d, taskTypeId:null, actionType:ACTION_TYPE_NORMAL, actionName:"", locationId:initialLoc, vehicleId:null, materiales:[], comentario:"", prevId:null, nextId:null, inheritFromId:null };
     list.splice((idx!=null && idx>=0)? idx+1 : list.length, 0, s);
     if(wasEmpty){
       state.localizacionInicial=state.localizacionInicial||{};
@@ -49,13 +51,13 @@
     const list=getPersonSessions(pid); let cur=null;
     for(let i=0;i<list.length;i++){
       const s=list[i];
-      if(i===0 && s.taskTypeId!==TASK_TRANSP){
+      if(i===0 && s.actionType!==ACTION_TYPE_TRANSPORT){
         cur = s.locationId || cur;
         state.localizacionInicial=state.localizacionInicial||{};
         state.localizacionInicial[pid]=cur||null;
         continue;
       }
-      if(s.taskTypeId===TASK_TRANSP){
+      if(s.actionType===ACTION_TYPE_TRANSPORT){
         // destino elegido por usuario
         cur = s.locationId || cur;
       }else{
@@ -76,6 +78,11 @@
         if(typeof s.linkPrevRole==="undefined") s.linkPrevRole=null;
         if(typeof s.linkNextRole==="undefined") s.linkNextRole=null;
         s.materiales=s.materiales||[];
+        if(typeof s.actionType==="undefined") s.actionType = (s.taskTypeId===TASK_TRANSP)?ACTION_TYPE_TRANSPORT:ACTION_TYPE_NORMAL;
+        if(typeof s.actionName==="undefined"){
+          const fallback=state.taskTypes?.find(t=>t.id===s.taskTypeId)?.nombre || "";
+          s.actionName=fallback;
+        }
       });
     });
     personIds().forEach(pid=>{
@@ -133,7 +140,7 @@
   window.setPrevLink = (mainId,dstId)=>{
     const c=canLinkPrev(mainId,dstId); if(!c.ok) return c;
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
-    d.taskTypeId = TASK_MONTAGE; d.materiales = (m.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)}));
+    d.taskTypeId = TASK_MONTAGE; d.actionType = ACTION_TYPE_NORMAL; d.materiales = (m.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)}));
     d.inheritFromId = m.id; m.prevId = d.id; d.nextId = m.id;
     m.linkPrevRole="pre-main"; d.linkNextRole="post-target";
     const msg=formatLinkMessage("prev", findSessionById(mainId), findSessionById(dstId));
@@ -142,7 +149,7 @@
   window.setPostLink = (mainId,dstId)=>{
     const c=canLinkPost(mainId,dstId); if(!c.ok) return c;
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
-    d.taskTypeId = TASK_DESMONT; d.materiales = []; d.inheritFromId=null;
+    d.taskTypeId = TASK_DESMONT; d.actionType = ACTION_TYPE_NORMAL; d.materiales = []; d.inheritFromId=null;
     m.nextId = d.id; d.prevId = m.id;
     m.linkNextRole="post-main"; d.linkPrevRole="pre-target";
     const msg=formatLinkMessage("post", findSessionById(mainId), findSessionById(dstId));
@@ -151,13 +158,13 @@
   window.clearPrevLink = (mainId)=>{
     const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
     const m=A.session; const P=findSessionById(m.prevId);
-    if(P){ const s=P.session; if(s.taskTypeId===TASK_MONTAGE){ s.taskTypeId=null; s.materiales=[]; s.inheritFromId=null; } s.nextId=null; s.linkNextRole=null; }
+    if(P){ const s=P.session; if(s.taskTypeId===TASK_MONTAGE){ s.taskTypeId=null; s.actionType=ACTION_TYPE_NORMAL; s.materiales=[]; s.inheritFromId=null; } s.nextId=null; s.linkNextRole=null; }
     m.prevId=null; m.linkPrevRole=null; touch(); return {ok:true};
   };
   window.clearPostLink = (mainId)=>{
     const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
     const m=A.session; const N=findSessionById(m.nextId);
-    if(N){ const s=N.session; if(s.taskTypeId===TASK_DESMONT){ s.taskTypeId=null; } s.prevId=null; s.linkPrevRole=null; }
+    if(N){ const s=N.session; if(s.taskTypeId===TASK_DESMONT){ s.taskTypeId=null; s.actionType=ACTION_TYPE_NORMAL; } s.prevId=null; s.linkPrevRole=null; }
     m.nextId=null; m.linkNextRole=null; touch(); return {ok:true};
   };
   window.resyncPrevMaterials = (montajeId)=>{
