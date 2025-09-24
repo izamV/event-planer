@@ -88,7 +88,7 @@
 
   function wire(){
     const $id=(x)=>document.getElementById(x);
-    const o=$id("openFile"); if(o) o.onchange=(e)=>{ const f=e.target.files?.[0]; if(f) importJSONFile(f,()=>{ ensureDefaults(); ensureLinkFields(); personTabs(); renderClient(); renderStatus(); renderStaffList(); }); };
+    const o=$id("openFile"); if(o) o.onchange=(e)=>{ const f=e.target.files?.[0]; if(f) importJSONFile(f,()=>{ ensureDefaults(); ensureSessionDefaults(); personTabs(); renderClient(); renderStatus(); renderStaffList(); }); };
     const nb=$id("newBtn"); if(nb) nb.onclick=()=>{ localStorage.clear(); location.reload(); };
     const sb=$id("saveBtn"); if(sb) sb.onclick=exportJSON;
 
@@ -118,7 +118,7 @@
     try{
       const raw=localStorage.getItem("eventplan.autosave"); if(raw){ const obj=JSON.parse(raw); if(obj&&obj.project) Object.assign(state,obj); }
     }catch(e){}
-    ensureDefaults(); ensureLinkFields();
+    ensureDefaults(); ensureSessionDefaults();
     const pN=document.getElementById("pNombre"); if(pN) pN.value=state.project.nombre||"";
     const pF=document.getElementById("pFecha"); if(pF) pF.value=state.project.fecha||"";
     const pT=document.getElementById("pTz"); if(pT) pT.value=state.project.tz||"Europe/Madrid";

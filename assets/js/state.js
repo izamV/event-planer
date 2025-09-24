@@ -58,10 +58,22 @@
       window.ensureSeedsCore = function(){
         const st=state;
         st.taskTypes=st.taskTypes||[]; st.vehicles=st.vehicles||[];
-        const upsert=(arr,obj)=>{ const i=arr.findIndex(x=>x.id===obj.id); if(i<0) arr.push(obj); else { const t=arr[i]; t.nombre=t.nombre||obj.nombre; if(obj.color) t.color=t.color||obj.color; t.locked=true; } };
-        upsert(st.taskTypes,{id:root.EP_IDS.TRANSP,nombre:"Transporte",color:"#22d3ee",locked:true});
-        upsert(st.taskTypes,{id:root.EP_IDS.MONT,  nombre:"Montaje",   color:"#a3e635",locked:true});
-        upsert(st.taskTypes,{id:root.EP_IDS.DESM,  nombre:"Desmontaje",color:"#f59e0b",locked:true});
+        const upsert=(arr,obj)=>{
+          const i=arr.findIndex(x=>x.id===obj.id);
+          if(i<0){
+            arr.push(obj);
+          }else{
+            const t=arr[i];
+            t.nombre=t.nombre||obj.nombre;
+            if(obj.color) t.color=t.color||obj.color;
+            if(obj.tipo && !t.tipo) t.tipo=obj.tipo;
+            if(obj.quien && !t.quien) t.quien=obj.quien;
+            t.locked=true;
+          }
+        };
+        upsert(st.taskTypes,{id:root.EP_IDS.TRANSP,nombre:"Transporte",color:"#22d3ee",locked:true,tipo:"transporte",quien:"SISTEMA"});
+        upsert(st.taskTypes,{id:root.EP_IDS.MONT,  nombre:"Montaje",   color:"#a3e635",locked:true,tipo:"especial",quien:"SISTEMA"});
+        upsert(st.taskTypes,{id:root.EP_IDS.DESM,  nombre:"Desmontaje",color:"#f59e0b",locked:true,tipo:"especial",quien:"SISTEMA"});
         upsert(st.vehicles, {id:"V_WALK",nombre:"Caminando",locked:true});
         const order=id=>({[root.EP_IDS.TRANSP]:0,[root.EP_IDS.MONT]:1,[root.EP_IDS.DESM]:2}[id]??9);
         st.taskTypes=st.taskTypes.filter((x,i,a)=>a.findIndex(y=>y.id===x.id)===i).sort((a,b)=>order(a.id)-order(b.id)||(a.nombre||"").localeCompare(b.nombre||""));

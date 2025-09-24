@@ -22,7 +22,7 @@
 })();
 
 
-(function(){
+﻿(function(){
   "use strict";
   const root = window;
   // Estado básico
@@ -82,10 +82,22 @@
       window.ensureSeedsCore = function(){
         const st=state;
         st.taskTypes=st.taskTypes||[]; st.vehicles=st.vehicles||[];
-        const upsert=(arr,obj)=>{ const i=arr.findIndex(x=>x.id===obj.id); if(i<0) arr.push(obj); else { const t=arr[i]; t.nombre=t.nombre||obj.nombre; if(obj.color) t.color=t.color||obj.color; t.locked=true; } };
-        upsert(st.taskTypes,{id:root.EP_IDS.TRANSP,nombre:"Transporte",color:"#22d3ee",locked:true});
-        upsert(st.taskTypes,{id:root.EP_IDS.MONT,  nombre:"Montaje",   color:"#a3e635",locked:true});
-        upsert(st.taskTypes,{id:root.EP_IDS.DESM,  nombre:"Desmontaje",color:"#f59e0b",locked:true});
+        const upsert=(arr,obj)=>{
+          const i=arr.findIndex(x=>x.id===obj.id);
+          if(i<0){
+            arr.push(obj);
+          }else{
+            const t=arr[i];
+            t.nombre=t.nombre||obj.nombre;
+            if(obj.color) t.color=t.color||obj.color;
+            if(obj.tipo && !t.tipo) t.tipo=obj.tipo;
+            if(obj.quien && !t.quien) t.quien=obj.quien;
+            t.locked=true;
+          }
+        };
+        upsert(st.taskTypes,{id:root.EP_IDS.TRANSP,nombre:"Transporte",color:"#22d3ee",locked:true,tipo:"transporte",quien:"SISTEMA"});
+        upsert(st.taskTypes,{id:root.EP_IDS.MONT,  nombre:"Montaje",   color:"#a3e635",locked:true,tipo:"especial",quien:"SISTEMA"});
+        upsert(st.taskTypes,{id:root.EP_IDS.DESM,  nombre:"Desmontaje",color:"#f59e0b",locked:true,tipo:"especial",quien:"SISTEMA"});
         upsert(st.vehicles, {id:"V_WALK",nombre:"Caminando",locked:true});
         const order=id=>({[root.EP_IDS.TRANSP]:0,[root.EP_IDS.MONT]:1,[root.EP_IDS.DESM]:2}[id]??9);
         st.taskTypes=st.taskTypes.filter((x,i,a)=>a.findIndex(y=>y.id===x.id)===i).sort((a,b)=>order(a.id)-order(b.id)||(a.nombre||"").localeCompare(b.nombre||""));
@@ -100,7 +112,97 @@
 (function(){
   "use strict";
   let __S_SEQ = 0;
-  const personIds = ()=> ["CLIENTE",...(state.staff||[]).map(p=>p.id)];
+  const ACTION_TRANSPORTE = "transporte";
+  const ACTION_NORMAL = "normal";
+
+  const personIds = ()=> ["CLIENTE", ...(state.staff||[]).map(p=>p.id)];
+  const ownerFor = (pid)=> pid || "CLIENTE";
+  const normalizeMode = (mode)=> String(mode||"").toLowerCase() === ACTION_TRANSPORTE ? ACTION_TRANSPORTE : ACTION_NORMAL;
+  const getTaskById = (id)=> (state.taskTypes||[]).find(t=>t.id===id) || null;
+
+  const isTransportActionId = (id)=>{
+    if(!id) return false;
+    if(id === TASK_TRANSP) return true;
+    const entry = getTaskById(id);
+    const tipo = String(entry?.tipo || entry?.type || "").toLowerCase();
+    return tipo === ACTION_TRANSPORTE;
+  };
+  window.isTransportActionId = isTransportActionId;
+
+  const isTransportSession = (session)=>{
+    if(!session) return false;
+    if(normalizeMode(session.actionMode) === ACTION_TRANSPORTE) return true;
+    return isTransportActionId(session.taskTypeId);
+  };
+  window.isTransportSession = isTransportSession;
+
+  const getSessionActionName = (session)=>{
+    if(!session) return "";
+    const direct = String(session.actionName || "").trim();
+    if(direct) return direct;
+    return getTaskById(session.taskTypeId)?.nombre || "";
+  };
+  window.getSessionActionName = getSessionActionName;
+
+  const nextTaskTypeId = ()=>{
+    let max = 0;
+    (state.taskTypes||[]).forEach(t=>{
+      const m = /^T_(\d+)$/i.exec(t.id || "");
+      if(m) max = Math.max(max, parseInt(m[1], 10) || 0);
+    });
+    return `T_${max+1}`;
+  };
+
+  const ensureActionCatalogEntry = ({nombre, tipo, quien, color})=>{
+    const name = String(nombre||"").trim();
+    if(!name) return null;
+    const kind = normalizeMode(tipo);
+    const owner = quien || "";
+    const lower = name.toLowerCase();
+    const existing = (state.taskTypes||[]).find(t=>{
+      const tName = String(t.nombre||"").trim().toLowerCase();
+      const tKind = normalizeMode(t.tipo || t.type);
+      const tOwner = t.quien || t.owner || "";
+      return tName === lower && tKind === kind && tOwner === owner;
+    });
+    if(existing){
+      if(color && !existing.color) existing.color = color;
+      if(!existing.tipo) existing.tipo = kind;
+      if(!existing.quien) existing.quien = owner;
+      return {entry:existing, created:false};
+    }
+    const entry = {
+      id: nextTaskTypeId(),
+      nombre: name,
+      color: color || (kind === ACTION_TRANSPORTE ? "#22d3ee" : "#60a5fa"),
+      locked: false,
+      tipo: kind,
+      quien: owner
+    };
+    state.taskTypes = state.taskTypes || [];
+    state.taskTypes.push(entry);
+    return {entry, created:true};
+  };
+  window.ensureActionCatalogEntry = ensureActionCatalogEntry;
+
+  const ensureActionForSession = (session, pid)=>{
+    if(!session) return null;
+    session.actionMode = normalizeMode(session.actionMode);
+    const trimmed = String(session.actionName||"").trim();
+    session.actionName = trimmed;
+    if(!trimmed){
+      session.taskTypeId = null;
+      return null;
+    }
+    const owner = ownerFor(pid);
+    const result = ensureActionCatalogEntry({nombre:trimmed, tipo:session.actionMode, quien:owner});
+    if(result?.entry){
+      session.taskTypeId = result.entry.id;
+    }
+    return result;
+  };
+  window.ensureActionForSession = ensureActionForSession;
+
   window.getPersonSessions = (pid)=>{ state.sessions[pid]=state.sessions[pid]||[]; return state.sessions[pid]; };
   window.getSelected = (pid)=> (state.project.view.selectedIndex||{})[pid] ?? null;
   window.setSelected = (pid,i)=>{ state.project.view.selectedIndex[state.project.view.lastTab||pid]=i; touch(); };
@@ -119,7 +221,18 @@
     const d=Math.max(5,Math.round((parseInt(durMin||15,10)||15)/5)*5);
     const start = (idx!=null && idx>=0 && list[idx]) ? list[idx].endMin : (list.length? list[list.length-1].endMin : (state.horaInicial?.[pid]??9*60));
     const initialLoc = wasEmpty ? (state.localizacionInicial?.[pid] ?? null) : null;
-    const s={ id:"S_"+(++__S_SEQ), startMin:start, endMin:start+d, taskTypeId:null, locationId:initialLoc, vehicleId:null, materiales:[], comentario:"", prevId:null, nextId:null, inheritFromId:null };
+    const s={
+      id:"S_"+(++__S_SEQ),
+      startMin:start,
+      endMin:start+d,
+      taskTypeId:null,
+      actionName:"",
+      actionMode:ACTION_NORMAL,
+      locationId:initialLoc,
+      vehicleId:null,
+      materiales:[],
+      comentario:""
+    };
     list.splice((idx!=null && idx>=0)? idx+1 : list.length, 0, s);
     if(wasEmpty){
       state.localizacionInicial=state.localizacionInicial||{};
@@ -143,226 +256,62 @@
     list[0].startMin=base; list[0].endMin=base+d0; reflow(pid); touch();
   };
 
-  // Localizaciones: bloqueadas excepto primera y transporte
   window.recomputeLocations = (pid)=>{
     const list=getPersonSessions(pid); let cur=null;
     for(let i=0;i<list.length;i++){
       const s=list[i];
-      if(i===0 && s.taskTypeId!==TASK_TRANSP){
+      if(i===0 && !isTransportSession(s)){
         cur = s.locationId || cur;
         continue;
       }
-      if(s.taskTypeId===TASK_TRANSP){
-        // destino elegido por usuario
+      if(isTransportSession(s)){
         cur = s.locationId || cur;
       }else{
-        // no transporte: hereda
         s.locationId = cur;
       }
     }
   };
 
-  // Vínculos
-  window.ensureLinkFields = ()=>{
+  function ensureSessionDefaults(){
     personIds().forEach(pid=>{
-      getPersonSessions(pid).forEach(s=>{
+      const list=getPersonSessions(pid);
+      list.forEach(s=>{
         if(!s.id) s.id="S_"+(++__S_SEQ);
-        if(typeof s.prevId==="undefined") s.prevId=null;
-        if(typeof s.nextId==="undefined") s.nextId=null;
-        if(typeof s.inheritFromId==="undefined") s.inheritFromId=null;
-        if(typeof s.linkPrevRole==="undefined") s.linkPrevRole=null;
-        if(typeof s.linkNextRole==="undefined") s.linkNextRole=null;
-        s.materiales=s.materiales||[];
-      });
-    });
-    personIds().forEach(pid=>{
-      getPersonSessions(pid).forEach(s=>{
-        if(s.prevId){
-          const prev=findSessionById(s.prevId);
-          if(prev && prev.session && prev.session.nextId===s.id && prev.session.inheritFromId===s.id){
-            s.linkPrevRole="pre-main";
-          }else{
-            s.linkPrevRole="pre-target";
-          }
-        }else s.linkPrevRole=null;
-        if(s.nextId){
-          if(s.inheritFromId && s.inheritFromId===s.nextId){
-            s.linkNextRole="post-target";
-          }else{
-            s.linkNextRole="post-main";
-          }
-        }else s.linkNextRole=null;
-      });
-    });
-  };
-  function findSessionById(sid){
-    for(const pid of personIds()){
-      const list=getPersonSessions(pid); const i=list.findIndex(x=>x.id===sid);
-      if(i>=0) return {pid,index:i,session:list[i]};
-    }
-    return null;
-  }
-  window.findSessionById = findSessionById;
-  const formatLinkMessage = (type, mainInfo, otherInfo)=>{
-    if(!mainInfo || !otherInfo) return null;
-    const fmt=(info)=> info.pid+" · #"+(info.index+1);
-    return type==="prev" ? `PRE vinculado: ${fmt(otherInfo)} → ${fmt(mainInfo)}` : `POST vinculado: ${fmt(mainInfo)} → ${fmt(otherInfo)}`;
-  };
-
-  window.canLinkPrev = (mainId,dstId)=>{
-    const A=findSessionById(mainId), B=findSessionById(dstId); if(!A||!B) return {ok:false,msg:"No encontrado"};
-    const m=A.session, d=B.session;
-    if(m.prevId) return {ok:false,msg:"La accion ya tiene PRE"};
-    if(d.prevId||d.nextId) return {ok:false,msg:"Destino ya vinculado"};
-    return {ok:true};
-  };
-  window.canLinkPost = (mainId,dstId)=>{
-    const A=findSessionById(mainId), B=findSessionById(dstId); if(!A||!B) return {ok:false,msg:"No encontrado"};
-    const m=A.session, d=B.session;
-    if(m.nextId) return {ok:false,msg:"La accion ya tiene POST"};
-    if(d.prevId||d.nextId) return {ok:false,msg:"Destino ya vinculado"};
-    return {ok:true};
-  };
-  window.setPrevLink = (mainId,dstId)=>{
-    const c=canLinkPrev(mainId,dstId); if(!c.ok) return c;
-    const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
-    d.taskTypeId = TASK_MONTAGE; d.materiales = (m.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)}));
-    d.inheritFromId = m.id; m.prevId = d.id; d.nextId = m.id;
-    m.linkPrevRole="pre-main"; d.linkNextRole="post-target";
-    const msg=formatLinkMessage("prev", findSessionById(mainId), findSessionById(dstId));
-    touch(); return {ok:true,msg};
-  };
-  window.setPostLink = (mainId,dstId)=>{
-    const c=canLinkPost(mainId,dstId); if(!c.ok) return c;
-    const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
-    d.taskTypeId = TASK_DESMONT; d.materiales = []; d.inheritFromId=null;
-    m.nextId = d.id; d.prevId = m.id;
-    m.linkNextRole="post-main"; d.linkPrevRole="pre-target";
-    const msg=formatLinkMessage("post", findSessionById(mainId), findSessionById(dstId));
-    touch(); return {ok:true,msg};
-  };
-  window.clearPrevLink = (mainId)=>{
-    const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
-    const m=A.session; const P=findSessionById(m.prevId);
-    if(P){ const s=P.session; if(s.taskTypeId===TASK_MONTAGE){ s.taskTypeId=null; s.materiales=[]; s.inheritFromId=null; } s.nextId=null; s.linkNextRole=null; }
-    m.prevId=null; m.linkPrevRole=null; touch(); return {ok:true};
-  };
-  window.clearPostLink = (mainId)=>{
-    const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
-    const m=A.session; const N=findSessionById(m.nextId);
-    if(N){ const s=N.session; if(s.taskTypeId===TASK_DESMONT){ s.taskTypeId=null; } s.prevId=null; s.linkPrevRole=null; }
-    m.nextId=null; m.linkNextRole=null; touch(); return {ok:true};
-  };
-  window.resyncPrevMaterials = (montajeId)=>{
-    const M=findSessionById(montajeId); if(!M) return {ok:false,msg:"No encontrado"};
-    const s=M.session; if(s.taskTypeId!==TASK_MONTAGE || !s.nextId) return {ok:false,msg:"No es Montaje PRE"};
-    const main=findSessionById(s.nextId)?.session; if(!main) return {ok:false,msg:"Sin destino"};
-    s.materiales=(main.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)})); s.inheritFromId=main.id; touch(); return {ok:true};
-  };
-})();
-
-
-(function(){
-  "use strict";
-  const colorFor=(taskId)=> state.taskTypes.find(t=>t.id===taskId)?.color || "#60a5fa";
-  const shortTag=(tid)=> tid===TASK_MONTAGE?"M":(tid===TASK_DESMONT?"D":"");
-
-  window.buildGantt=(cont,persons)=>{
-    cont.innerHTML="";
-    const wrap=el("div","gwrap");
-    const head=el("div","gantt-header"); head.appendChild(el("div",null,"Persona"));
-    const hours=el("div","gantt-hours"); for(let h=0;h<24;h++) hours.appendChild(el("div",null,String(h).padStart(2,"0")+":00"));
-    head.appendChild(hours); wrap.appendChild(head);
-
-    persons.forEach(p=>{
-      const row=el("div","gantt-row");
-      row.appendChild(el("div",null,p.nombre));
-      const track=el("div","gantt-track");
-      (state.sessions?.[p.id]||[]).forEach(s=>{
-        const seg=el("div","seg");
-        seg.style.left=((s.startMin/1440)*100)+"%";
-        seg.style.width=(((s.endMin-s.startMin)/1440)*100)+"%";
-        seg.style.background=colorFor(s.taskTypeId);
-        const label=(state.taskTypes.find(t=>t.id===s.taskTypeId)?.nombre||"");
-        seg.title=toHHMM(s.startMin)+"-"+toHHMM(s.endMin)+" · "+label;
-        seg.appendChild(el("div","meta",(shortTag(s.taskTypeId)?shortTag(s.taskTypeId)+" · ":"")+label));
-        track.appendChild(seg);
-      });
-      row.appendChild(track); wrap.appendChild(row);
-    });
-    cont.appendChild(wrap);
-  };
-
-  const toName = (id,arr,key="id",field="nombre")=> arr.find(x=>x[key]===id)?.[field]||"-";
-
-  window.buildCards=(cont,persons)=>{
-    cont.innerHTML="";
-    const tools=el("div","row"); const pr=el("button","btn small","Imprimir"); pr.onclick=()=>window.print(); tools.appendChild(pr); cont.appendChild(tools);
-    const list=el("div","cardlist");
-    persons.forEach(p=>{
-      const card=el("div","card"); card.appendChild(el("h4",null,p.nombre));
-      const body=el("div");
-      (state.sessions?.[p.id]||[]).forEach(s=>{
-        const item=el("div","item");
-        item.appendChild(el("div",null, toHHMM(s.startMin)+"–"+toHHMM(s.endMin)));
-        item.appendChild(el("div",null, [ toName(s.taskTypeId,state.taskTypes), toName(s.locationId,state.locations) ].join(" · ")));
-        body.appendChild(item);
-        if(s.materiales?.length){
-          const txt=s.materiales.map(m=> (toName(m.materialTypeId,state.materialTypes))+" x "+(m.cantidad||0)).join(", ");
-          body.appendChild(el("div","mini","Materiales: "+txt));
+        if(!Array.isArray(s.materiales)) s.materiales=[];
+        if(typeof s.prevId!=="undefined") s.prevId=null;
+        if(typeof s.nextId!=="undefined") s.nextId=null;
+        if(typeof s.inheritFromId!=="undefined") s.inheritFromId=null;
+        if(typeof s.linkPrevRole!=="undefined") s.linkPrevRole=null;
+        if(typeof s.linkNextRole!=="undefined") s.linkNextRole=null;
+        const transportById = isTransportActionId(s.taskTypeId);
+        if(typeof s.actionMode==="undefined" || s.actionMode===null || s.actionMode===""){
+          s.actionMode = transportById ? ACTION_TRANSPORTE : ACTION_NORMAL;
+        }else{
+          s.actionMode = normalizeMode(s.actionMode);
+          if(transportById) s.actionMode = ACTION_TRANSPORTE;
         }
-        if(s.comentario){ body.appendChild(el("div","mini","Notas: "+s.comentario)); }
+        if(typeof s.actionName==="undefined" || s.actionName===null){
+          s.actionName = getSessionActionName(s);
+        }else{
+          s.actionName = String(s.actionName||"").trim();
+        }
       });
-      card.appendChild(body); list.appendChild(card);
     });
-    cont.appendChild(list);
-  };
-
-  window.buildSummary=(cont,persons)=>{
-    cont.innerHTML="";
-    const tbl=el("table"); const thead=el("thead"); const trh=el("tr");
-    ["Persona","Acciones","Min totales","Por tarea"].forEach(h=>trh.appendChild(el("th",null,h))); thead.appendChild(trh); tbl.appendChild(thead);
-    const tb=el("tbody");
-    persons.forEach(p=>{
-      const arr=(state.sessions?.[p.id]||[]); let mins=0; const byTask=new Map();
-      arr.forEach(s=>{ const d=(s.endMin-s.startMin); mins+=d; const k=state.taskTypes.find(t=>t.id===s.taskTypeId)?.nombre||"Sin tarea"; byTask.set(k,(byTask.get(k)||0)+d); });
-      const tr=el("tr");
-      tr.appendChild(el("td",null,p.nombre)); tr.appendChild(el("td",null,String(arr.length))); tr.appendChild(el("td",null,String(mins)));
-      tr.appendChild(el("td",null, Array.from(byTask.entries()).map(([k,v])=>k+": "+v+"m").join(" · ") || "-"));
-      tb.appendChild(tr);
-    });
-    tbl.appendChild(tb); cont.appendChild(tbl);
-  };
+  }
+  window.ensureSessionDefaults = ensureSessionDefaults;
 })();
 
 
-(function(){
+﻿(function(){
   "use strict";
   const autoGrow=(ta)=>{ ta.style.height="auto"; ta.style.height=(ta.scrollHeight)+"px"; };
   const lockChip=(txt)=>{ const d=el("div","lock-chip"); d.appendChild(el("span","ico","🔒")); d.appendChild(el("span",null,txt||"-")); return d; };
 
-  const linkMode={active:false,kind:null,sourceId:null}; // kind: "prev" | "post"
-
-  function banner(container){
-    const b=el("div","toolbar");
-    b.appendChild(el("span",null, linkMode.kind==="prev"?"Selecciona fila vacia para PRE (Montaje por defecto)":"Selecciona fila vacia para POST (Desmontaje por defecto)"));
-    const cancel=el("button","btn danger small","Cancelar"); cancel.style.marginLeft=".5rem"; cancel.onclick=()=>{ linkMode.active=false; renderClient(); };
-    b.appendChild(cancel); container.prepend(b);
-  }
-
   window.renderVerticalEditor = (container,pid)=>{
-    ensureLinkFields();
+    ensureSessionDefaults();
     container.innerHTML="";
-    if(linkMode.active) banner(container);
 
     const list=getPersonSessions(pid);
-    const first=list[0];
-    if(first && first.taskTypeId===TASK_TRANSP){
-      first.taskTypeId=null;
-      first.vehicleId=null;
-      recomputeLocations(pid);
-      touch();
-    }
     if(!list.length){ container.appendChild(el("div","mini","No hay acciones.")); return; }
 
     const computeTransportFlow=(targetIdx)=>{
@@ -372,11 +321,11 @@
         if(i===targetIdx){
           return {origin:cur,destination:item.locationId||cur};
         }
-        if(i===0 && item.taskTypeId!==TASK_TRANSP){
+        if(i===0 && !isTransportSession(item)){
           cur=item.locationId||cur;
           continue;
         }
-        if(item.taskTypeId===TASK_TRANSP){
+        if(isTransportSession(item)){
           const dest=item.locationId||cur;
           cur=dest;
         }else{
@@ -390,20 +339,6 @@
     list.forEach((s,idx)=>{
       const row=el("div","vrow"); if(getSelected(pid)===idx) row.classList.add("selected");
 
-      // En modo vinculo, permitir elegir fila vacia
-      if(linkMode.active){
-        row.classList.add("canlink");
-        row.onclick=()=>{
-          let result;
-          if(linkMode.kind==="prev"){ result=setPrevLink(linkMode.sourceId,s.id); }
-          else { result=setPostLink(linkMode.sourceId,s.id); }
-          if(!result.ok){ alert(result.msg); return; }
-          if(result.msg && window.flashStatus){ window.flashStatus(result.msg); }
-          linkMode.active=false; renderClient();
-        };
-      }
-
-      // Selector, hora y duracion
       const sel=el("div","selcell");
       const header=el("div","slot-index");
       const bSel=el("button","btn chip",String(idx+1)); bSel.title="Seleccionar"; bSel.onclick=(e)=>{ e.stopPropagation(); setSelected(pid,idx); renderVerticalEditor(container,pid); };
@@ -429,92 +364,59 @@
       timeDisplay.appendChild(durationHint);
       header.appendChild(bSel); header.appendChild(bDel); header.appendChild(timeDisplay);
       sel.appendChild(header);
-
-      const timeTools=el("div","time-tools");
-      const linkHints=el("div","link-hints");
-      const formatSessionLabel=(info,fallback)=> info? `${info.pid} · #${info.index+1}` : (fallback? `#${fallback}` : "#?");
-      const selfInfo={pid,index:idx,session:s};
-      const addLinkHint=(label,text,onRemove,extra=[])=>{
-        const wrap=el("div","duration-hint link-hint");
-        wrap.appendChild(el("span",null,`${label}: ${text}`));
-        extra.forEach(btn=>wrap.appendChild(btn));
-        const close=el("button","btn danger small","✕"); close.title="Quitar vinculo"; close.onclick=(e)=>{ e.stopPropagation(); onRemove(); };
-        wrap.appendChild(close);
-        linkHints.appendChild(wrap);
-      };
-      if(s.prevId){
-        const other=findSessionById(s.prevId);
-        if(s.linkPrevRole==="pre-main"){
-          addLinkHint("Vinculación PRE", `${formatSessionLabel(other,s.prevId)} → ${formatSessionLabel(selfInfo,s.id)}`, ()=>{ clearPrevLink(s.id); renderClient(); });
-        }else if(s.linkPrevRole==="pre-target"){
-          addLinkHint("Vinculación PRE", `${formatSessionLabel(selfInfo,s.id)} → ${formatSessionLabel(other,s.prevId)}`, ()=>{ clearPostLink(s.prevId); renderClient(); });
-        }
-      }
-      if(s.nextId){
-        const other=findSessionById(s.nextId);
-        if(s.linkNextRole==="post-main"){
-          addLinkHint("Vinculación POST", `${formatSessionLabel(selfInfo,s.id)} → ${formatSessionLabel(other,s.nextId)}`, ()=>{ clearPostLink(s.id); renderClient(); });
-        }else if(s.linkNextRole==="post-target"){
-          const extras=[];
-          if(s.taskTypeId===TASK_MONTAGE){
-            const r=el("button","icon-btn ghost","⟳"); r.title="Re-sincronizar materiales del principal"; r.onclick=(e)=>{ e.stopPropagation(); resyncPrevMaterials(s.id); renderClient(); }; extras.push(r);
-          }
-          addLinkHint("Vinculación POST", `${formatSessionLabel(other,s.nextId)} → ${formatSessionLabel(selfInfo,s.id)}`, ()=>{ clearPrevLink(s.nextId); renderClient(); }, extras);
-        }
-      }
-      if(linkHints.childElementCount){
-        timeTools.appendChild(linkHints);
-        sel.appendChild(timeTools);
-      }
-
-      const linkWrap=el("div","link-controls under-slot");
-      const bPrev=el("button","icon-btn ghost","◀"); bPrev.title="Vincular PRE"; bPrev.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="prev"; linkMode.sourceId=s.id; renderClient(); };
-      const bPost=el("button","icon-btn ghost","▶"); bPost.title="Vincular POST"; bPost.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="post"; linkMode.sourceId=s.id; renderClient(); };
-      linkWrap.appendChild(bPrev); linkWrap.appendChild(bPost);
-      sel.appendChild(linkWrap);
       row.appendChild(sel);
 
-      // Tarea
-      const tdiv=el("div","param task-cell"); tdiv.innerHTML="<label>Tarea</label>";
-      const tsel=el("select","input"); const t0=el("option",null,"- seleccionar -"); t0.value=""; tsel.appendChild(t0);
-      const allowMont=!!s.nextId; const allowDesm=!!s.prevId;
-      state.taskTypes.forEach(t=>{
-        const isM=t.id===TASK_MONTAGE, isD=t.id===TASK_DESMONT;
-        if(isM && !allowMont) return;
-        if(isD && !allowDesm) return;
-        if(idx===0 && t.id===TASK_TRANSP) return;
-        const o=el("option",null,t.nombre); o.value=t.id; if(t.id===s.taskTypeId) o.selected=true; tsel.appendChild(o);
-      });
-      tsel.onchange=()=>{
-        const v=tsel.value||null;
-        if(v===TASK_MONTAGE && !allowMont){ alert("Montaje solo si la fila es PRE de otra."); tsel.value=s.taskTypeId||""; return; }
-        if(v===TASK_DESMONT && !allowDesm){ alert("Desmontaje solo si la fila es POST de otra."); tsel.value=s.taskTypeId||""; return; }
-        s.taskTypeId=v;
-        if(v===TASK_MONTAGE && s.nextId){
-          const target=findSessionById(s.nextId)?.session;
-          s.inheritFromId=s.nextId;
-          s.materiales=(target?.materiales||[]).map(m=>({materialTypeId:m.materialTypeId,cantidad:Number(m.cantidad||0)}));
-        }else{
-          s.inheritFromId=null;
-        }
-        if(v!==TASK_TRANSP){ s.vehicleId=null; }
-        touch(); renderVerticalEditor(container,pid);
+      const tdiv=el("div","param task-cell");
+      const tlabel=el("label",null,"Tarea");
+      tdiv.appendChild(tlabel);
+      const nameInput=el("input","input");
+      nameInput.placeholder="Nombre de la acción";
+      nameInput.value=getSessionActionName(s);
+      nameInput.oninput=()=>{ s.actionName=nameInput.value; };
+      nameInput.onchange=()=>{
+        s.actionName=nameInput.value.trim();
+        ensureActionForSession(s,pid);
+        recomputeLocations(pid);
+        touch();
+        renderVerticalEditor(container,pid);
       };
-      tdiv.appendChild(tsel); row.appendChild(tdiv);
+      tdiv.appendChild(nameInput);
+      const typeWrap=el("div","task-type-selector");
+      const makeTypeOption=(value,label)=>{
+        const wrap=el("label","task-type-option");
+        const radio=el("input"); radio.type="radio"; radio.name=`type_${pid}_${s.id}`; radio.value=value; radio.checked=(String(s.actionMode||"normal").toLowerCase()===value);
+        radio.onchange=()=>{
+          if(!radio.checked) return;
+          s.actionMode=value;
+          ensureActionForSession(s,pid);
+          if(value!=="transporte"){ s.vehicleId=null; }
+          recomputeLocations(pid);
+          touch();
+          renderVerticalEditor(container,pid);
+        };
+        wrap.appendChild(radio);
+        wrap.appendChild(el("span",null,label));
+        return wrap;
+      };
+      typeWrap.appendChild(makeTypeOption("normal","Normal"));
+      typeWrap.appendChild(makeTypeOption("transporte","Transporte"));
+      tdiv.appendChild(typeWrap);
+      row.appendChild(tdiv);
 
-      // Localización (bloqueada salvo primera o transporte)
       const ldiv=el("div","param location-cell");
-      if(idx===0 && s.taskTypeId!==TASK_TRANSP){
+      if(idx===0 && !isTransportSession(s)){
         ldiv.innerHTML="<label>Localizacion inicial</label>";
         const lsel=el("select","input"); const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
         state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===s.locationId) o.selected=true; lsel.appendChild(o); });
-        lsel.onchange=()=>{ s.locationId=lsel.value||null; recomputeLocations(pid);
+        lsel.onchange=()=>{
+          s.locationId=lsel.value||null; recomputeLocations(pid);
           state.localizacionInicial=state.localizacionInicial||{};
           state.localizacionInicial[pid]=s.locationId||null;
-          touch(); renderVerticalEditor(container,pid);
+          touch();
+          renderVerticalEditor(container,pid);
         };
         ldiv.appendChild(lsel);
-      }else if(s.taskTypeId===TASK_TRANSP){
+      }else if(isTransportSession(s)){
         ldiv.classList.add("stacked");
         ldiv.innerHTML="<label>Destino</label>";
         const lsel=el("select","input"); const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
@@ -532,9 +434,8 @@
       }
       row.appendChild(ldiv);
 
-      // Vehiculo (solo Transporte)
       const vdiv=el("div","param vehicle-cell"); vdiv.innerHTML="<label>Vehiculo</label>";
-      if(s.taskTypeId===TASK_TRANSP){
+      if(isTransportSession(s)){
         const vsel=el("select","input"); const v0=el("option",null,"- seleccionar -"); v0.value=""; vsel.appendChild(v0);
         state.vehicles.forEach(v=>{ const o=el("option",null,v.nombre); o.value=v.id; if(v.id===s.vehicleId) o.selected=true; vsel.appendChild(o); });
         if(!s.vehicleId){ const def=state.vehicles.find(v=>v.id==="V_WALK")?.id; if(def) s.vehicleId=def; }
@@ -543,66 +444,38 @@
       }else vdiv.appendChild(lockChip("No aplica"));
       row.appendChild(vdiv);
 
-      // Materiales + Vínculos
       const mdiv=el("div","param materials-cell");
       const mheader=el("div","materials-header");
       const mlabel=el("label",null,"Materiales");
       mheader.appendChild(mlabel); mdiv.appendChild(mheader);
-
-      const selected = (getSelected(pid)===idx);
-      if(selected){
-        const add=el("div","materials-add");
-        const msel=el("select","input"); const m0=el("option",null, state.materialTypes.length? "- seleccionar -" : "No hay materiales (usar Catalogo)"); m0.value=""; msel.appendChild(m0);
-        state.materialTypes.forEach(m=>{ if(!(s.materiales||[]).some(x=>x.materialTypeId===m.id)){ const o=el("option",null,m.nombre); o.value=m.id; msel.appendChild(o); } });
-        const q=el("input","input"); q.type="number"; q.min="0"; q.step="1"; q.placeholder="1";
-        const addB=el("button","btn small","Añadir");
-        const doAdd=()=>{ const id=msel.value; let n=parseInt(q.value||"1",10); if(!id){ alert("Selecciona un material"); return; } if(!Number.isInteger(n)||n<0) n=1;
-          s.materiales=s.materiales||[]; const ex=s.materiales.find(mm=>mm.materialTypeId===id);
-          if(ex){ ex.cantidad=(parseInt(ex.cantidad||"0",10)||0)+n; } else { s.materiales.push({materialTypeId:id,cantidad:n}); }
-          touch(); renderVerticalEditor(container,pid);
-        };
-        addB.onclick=(e)=>{ e.stopPropagation(); doAdd(); }; q.onkeydown=(e)=>{ if(e.key==="Enter"){ e.preventDefault(); doAdd(); } };
-        add.appendChild(msel); add.appendChild(q); add.appendChild(addB); mdiv.appendChild(add);
-
-        const tbl=el("table","matlist"); const thead=el("thead"); const hr=el("tr");
-        ["Material","Cantidad","Acciones"].forEach(h=>hr.appendChild(el("th",null,h))); thead.appendChild(hr); tbl.appendChild(thead);
+      const items=s.materiales||[];
+      if(items.length){
+        const tbl=el("table","matlist");
+        const thead=el("thead"); const hr=el("tr");
+        ["Material","Cantidad"].forEach(h=>hr.appendChild(el("th",null,h)));
+        thead.appendChild(hr); tbl.appendChild(thead);
         const tb=el("tbody");
-        const inc=(id)=>{ const it=s.materiales.find(x=>x.materialTypeId===id); if(!it) return; it.cantidad=(parseInt(it.cantidad||"0",10)||0)+1; touch(); renderVerticalEditor(container,pid); };
-        const dec=(id)=>{ const it=s.materiales.find(x=>x.materialTypeId===id); if(!it) return; const v=(parseInt(it.cantidad||"0",10)||0)-1; if(v<=0){ s.materiales=s.materiales.filter(x=>x.materialTypeId!==id); } else { it.cantidad=v; } touch(); renderVerticalEditor(container,pid); };
-        const del=(id)=>{ s.materiales=s.materiales.filter(x=>x.materialTypeId!==id); touch(); renderVerticalEditor(container,pid); };
-        (s.materiales||[]).forEach(m=>{
+        items.forEach(m=>{
           const tr=el("tr");
           tr.appendChild(el("td",null, state.materialTypes.find(mt=>mt.id===m.materialTypeId)?.nombre || "Material"));
           tr.appendChild(el("td","qty", String(parseInt(m.cantidad||"0",10)||0)));
-          const act=el("td","act");
-          const p=el("button","icon-btn ghost","+"); p.title="Sumar"; p.onclick=(e)=>{ e.stopPropagation(); inc(m.materialTypeId); };
-          const r=el("button","icon-btn ghost","−"); r.title="Restar"; r.onclick=(e)=>{ e.stopPropagation(); dec(m.materialTypeId); };
-          const d=el("button","icon-btn danger","✕"); d.title="Eliminar"; d.onclick=(e)=>{ e.stopPropagation(); del(m.materialTypeId); };
-          act.appendChild(p); act.appendChild(r); act.appendChild(d); tr.appendChild(act); tb.appendChild(tr);
+          tb.appendChild(tr);
         });
-        if(!(s.materiales||[]).length){ const tr=el("tr"); const td=el("td"); td.colSpan=3; td.textContent="Sin materiales"; tr.appendChild(td); tb.appendChild(tr); }
         tbl.appendChild(tb); mdiv.appendChild(tbl);
       }else{
-        const txt=(s.materiales||[]).map(m=> (state.materialTypes.find(mt=>mt.id===m.materialTypeId)?.nombre||"Material")+" x "+(parseInt(m.cantidad||"0",10)||0)).join(", ");
-        mdiv.appendChild(el("div","materials-summary", txt||"Sin materiales"));
+        mdiv.appendChild(el("div","materials-summary","Sin materiales"));
       }
       row.appendChild(mdiv);
 
-      // Notas
       const ndiv=el("div","param notes-cell");
       const nlabel=el("label",null,"Notas");
-      const ta=el("textarea","input notes"); ta.rows=3; ta.value=String(s.comentario||""); ta.placeholder="Comentarios de la acción";
+      const ta=el("textarea","input"); ta.rows=3; ta.value=String(s.comentario||""); ta.placeholder="Comentarios de la accion";
       ta.oninput=()=>{ s.comentario=ta.value; touch(); autoGrow(ta); };
-      setTimeout(()=>autoGrow(ta),0);
-      ndiv.appendChild(nlabel);
-      ndiv.appendChild(ta); row.appendChild(ndiv);
+      setTimeout(()=>autoGrow(ta),0); ndiv.appendChild(nlabel); ndiv.appendChild(ta); row.appendChild(ndiv);
 
       container.appendChild(row);
     });
-
-    document.onkeydown=(e)=>{ if(e.key==="Escape" && linkMode.active){ linkMode.active=false; renderClient(); } };
   };
-
   // Render de vista completo (toolbar mínima incluida)
   window.renderClient = ()=>{
     const pid = (state.project.view.lastTab==="CLIENTE" || !state.project.view.lastTab)? "CLIENTE" : state.project.view.lastTab;
@@ -647,7 +520,7 @@
 
 
 
-(function(){
+﻿(function(){
   "use strict";
   function emitChanged(){ document.dispatchEvent(new Event("catalogs-changed")); touch(); }
 
@@ -694,32 +567,41 @@
     cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Tareas"));
     const add=el("div","row");
     const name=el("input","input"); name.placeholder="Nombre";
+    const tipo=el("select","input");
+    [{value:"normal",label:"Normal"},{value:"transporte",label:"Transporte"}].forEach(opt=>{ const o=el("option",null,opt.label); o.value=opt.value; tipo.appendChild(o); });
+    const owner=el("input","input"); owner.placeholder="Quién"; owner.value="CLIENTE";
     const color=el("input","input"); color.type="color"; color.value="#60a5fa";
     const b=el("button","btn","Añadir");
     b.onclick=()=>{
       const n=name.value.trim(); if(!n) return;
-      state.taskTypes.push({id:"T_"+(state.taskTypes.length+1), nombre:n, color:color.value||"#60a5fa", locked:false});
-      name.value=""; emitChanged(); openCatTask(cont);
+      const quien=(owner.value||"CLIENTE").trim();
+      ensureActionCatalogEntry({nombre:n, tipo:tipo.value, quien, color:color.value||"#60a5fa"});
+      name.value=""; owner.value="CLIENTE"; emitChanged(); openCatTask(cont);
     };
-    add.appendChild(name); add.appendChild(color); add.appendChild(b); cont.appendChild(add);
+    add.appendChild(name); add.appendChild(tipo); add.appendChild(owner); add.appendChild(color); add.appendChild(b); cont.appendChild(add);
 
-    // Lista
-    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
-    // Orden: bloqueados primero
+    const tbl=el("table");
+    const thead=el("thead"); const thr=el("tr");
+    ["Nombre","Tipo","Quién","Color","Acciones"].forEach(h=>thr.appendChild(el("th",null,h)));
+    thead.appendChild(thr); tbl.appendChild(thead);
+    const tb=el("tbody"); tbl.appendChild(tb);
     const order=id=>({[TASK_TRANSP]:0,[TASK_MONTAGE]:1,[TASK_DESMONT]:2}[id]??9);
-    [...state.taskTypes].sort((a,b)=> (a.locked===b.locked? order(a.id)-order(b.id) : (a.locked?-1:1)) || (a.nombre||"").localeCompare(b.nombre||"") )
-      .forEach((t,idx)=>{
+    [...state.taskTypes].sort((a,b)=> (a.locked===b.locked? order(a.id)-order(b.id) : (a.locked?-1:1)) || (a.nombre||"").localeCompare(b.nombre||""))
+      .forEach((t)=>{
         const i= state.taskTypes.findIndex(x=>x.id===t.id);
         const tr=el("tr");
-        const n=el("input","input"); n.value=t.nombre; n.oninput=()=>{ t.nombre=n.value; touch(); };
+        const n=el("input","input"); n.value=t.nombre||""; n.oninput=()=>{ t.nombre=n.value; touch(); };
+        const sTipo=el("select","input");
+        [{value:"normal",label:"Normal"},{value:"transporte",label:"Transporte"}].forEach(opt=>{ const o=el("option",null,opt.label); o.value=opt.value; if(opt.value===(t.tipo||"normal")) o.selected=true; sTipo.appendChild(o); });
+        sTipo.onchange=()=>{ t.tipo=sTipo.value; touch(); };
+        const q=el("input","input"); q.value=t.quien||""; q.placeholder="Quién"; q.oninput=()=>{ t.quien=q.value; touch(); };
         const c=el("input","input"); c.type="color"; c.value=t.color||"#60a5fa"; c.oninput=()=>{ t.color=c.value; touch(); };
         const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.taskTypes.splice(i,1); emitChanged(); openCatTask(cont); };
-        tr.appendChild(n); tr.appendChild(c); tr.appendChild(del); tb.appendChild(tr);
+        tr.appendChild(n); tr.appendChild(sTipo); tr.appendChild(q); tr.appendChild(c); tr.appendChild(del); tb.appendChild(tr);
         lockMark(tr, !!t.locked);
       });
     cont.appendChild(tbl);
   };
-
   window.openCatMat = (cont)=>{
     cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Materiales"));
     const add=el("div","row");
@@ -765,7 +647,7 @@
 })();
 
 
-(function(){
+﻿(function(){
   "use strict";
   function allPersons(){ return ["CLIENTE", ...(state.staff||[]).map(s=>s.id)]; }
   function collectTotals(){
@@ -812,6 +694,83 @@
     Array.from(totals.entries()).forEach(([id,q])=> rows.push([state.materialTypes.find(mt=>mt.id===id)?.nombre||"Material", String(q)]));
     const csv = rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(",")).join("\r\n");
     const a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv); a.download="materiales.csv"; a.click();
+  };
+})();
+
+
+﻿(function(){
+  "use strict";
+  const colorFor=(session)=>{
+    const entry=state.taskTypes.find(t=>t.id===session.taskTypeId);
+    if(entry?.color) return entry.color;
+    return isTransportSession(session)? "#22d3ee" : "#60a5fa";
+  };
+
+  window.buildGantt=(cont,persons)=>{
+    cont.innerHTML="";
+    const wrap=el("div","gwrap");
+    const head=el("div","gantt-header"); head.appendChild(el("div",null,"Persona"));
+    const hours=el("div","gantt-hours"); for(let h=0;h<24;h++) hours.appendChild(el("div",null,String(h).padStart(2,"0")+":00"));
+    head.appendChild(hours); wrap.appendChild(head);
+
+    persons.forEach(p=>{
+      const row=el("div","gantt-row");
+      row.appendChild(el("div",null,p.nombre));
+      const track=el("div","gantt-track");
+      (state.sessions?.[p.id]||[]).forEach(s=>{
+        const seg=el("div","seg");
+        seg.style.left=((s.startMin/1440)*100)+"%";
+        seg.style.width=(((s.endMin-s.startMin)/1440)*100)+"%";
+        seg.style.background=colorFor(s);
+        const label=getSessionActionName(s) || "";
+        seg.title=toHHMM(s.startMin)+"-"+toHHMM(s.endMin)+" · "+label;
+        seg.appendChild(el("div","meta",label));
+        track.appendChild(seg);
+      });
+      row.appendChild(track); wrap.appendChild(row);
+    });
+    cont.appendChild(wrap);
+  };
+
+  const toName = (id,arr,key="id",field="nombre")=> arr.find(x=>x[key]===id)?.[field]||"-";
+
+  window.buildCards=(cont,persons)=>{
+    cont.innerHTML="";
+    const tools=el("div","row"); const pr=el("button","btn small","Imprimir"); pr.onclick=()=>window.print(); tools.appendChild(pr); cont.appendChild(tools);
+    const list=el("div","cardlist");
+    persons.forEach(p=>{
+      const card=el("div","card"); card.appendChild(el("h4",null,p.nombre));
+      const body=el("div");
+      (state.sessions?.[p.id]||[]).forEach(s=>{
+        const item=el("div","item");
+        item.appendChild(el("div",null, toHHMM(s.startMin)+"–"+toHHMM(s.endMin)));
+        item.appendChild(el("div",null, [ getSessionActionName(s)||"", toName(s.locationId,state.locations) ].filter(Boolean).join(" · ")));
+        body.appendChild(item);
+        if(s.materiales?.length){
+          const txt=s.materiales.map(m=> (toName(m.materialTypeId,state.materialTypes))+" x "+(m.cantidad||0)).join(", ");
+          body.appendChild(el("div","mini","Materiales: "+txt));
+        }
+        if(s.comentario){ body.appendChild(el("div","mini","Notas: "+s.comentario)); }
+      });
+      card.appendChild(body); list.appendChild(card);
+    });
+    cont.appendChild(list);
+  };
+
+  window.buildSummary=(cont,persons)=>{
+    cont.innerHTML="";
+    const tbl=el("table"); const thead=el("thead"); const trh=el("tr");
+    ["Persona","Acciones","Min totales","Por tarea"].forEach(h=>trh.appendChild(el("th",null,h))); thead.appendChild(trh); tbl.appendChild(thead);
+    const tb=el("tbody");
+    persons.forEach(p=>{
+      const arr=(state.sessions?.[p.id]||[]); let mins=0; const byTask=new Map();
+      arr.forEach(s=>{ const d=(s.endMin-s.startMin); mins+=d; const k=getSessionActionName(s)||"Sin tarea"; byTask.set(k,(byTask.get(k)||0)+d); });
+      const tr=el("tr");
+      tr.appendChild(el("td",null,p.nombre)); tr.appendChild(el("td",null,String(arr.length))); tr.appendChild(el("td",null,String(mins)));
+      tr.appendChild(el("td",null, Array.from(byTask.entries()).map(([k,v])=>k+": "+v+"m").join(" · ") || "-"));
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb); cont.appendChild(tbl);
   };
 })();
 
@@ -891,7 +850,6 @@
   const buildTimeline = (locations)=>{
     const locMap = new Map(locations.map(l=>[l.id, l]));
     const persons = [{ id:"CLIENTE", nombre:"Cliente" }, ...(state.staff||[])];
-    const taskNames = new Map((state.taskTypes||[]).map(t=>[t.id, t.nombre]));
     const tracks=[];
     let earliest=Infinity;
     let latest=-Infinity;
@@ -905,7 +863,7 @@
         const end=Number(s.endMin);
         if(!Number.isFinite(start) || !Number.isFinite(end) || end<=start) return;
         const dest = s.locationId ? locMap.get(s.locationId) : null;
-        const isTransport = (s.taskTypeId === TASK_TRANSP);
+        const isTransport = isTransportSession(s);
         let from = lastLoc || dest || null;
         let to = dest || from;
         if(isTransport){
@@ -927,7 +885,7 @@
             return;
           }
         }
-        const label = taskNames.get(s.taskTypeId) || "";
+        const label = getSessionActionName(s) || "";
         segments.push({ start, end, from, to, isTransport, session:s, label, location:dest });
         if(dest) lastLoc = dest;
         earliest = Math.min(earliest, start);
@@ -1375,7 +1333,7 @@
 })();
 
 
-(function(){
+﻿(function(){
   "use strict";
   const clienteMeta={id:"CLIENTE",nombre:"Cliente",rol:"CLIENTE"};
   function showOnly(id){
@@ -1388,12 +1346,7 @@
     const mk=(p,isActive)=>{
       const b=el("button","tab"+(isActive?" active":""), p.nombre);
       b.dataset.pid=p.id;
-      b.onclick=()=>{
-        showOnly("clienteView");
-        state.project.view.lastTab=p.id;
-        renderClient();
-        personTabs();
-      };
+      b.onclick=()=>{ state.project.view.lastTab=p.id; renderClient(); personTabs(); };
       tabs.appendChild(b);
     };
     const activeId = (state.project.view.lastTab==="CLIENTE"||state.project.view.lastTab==="cliente") ? "CLIENTE" : state.project.view.lastTab;
@@ -1421,12 +1374,7 @@
       const chip=el("div","staffchip");
       const nameEl = el("span",null,p.nombre);
       nameEl.style.cursor="pointer";
-      nameEl.onclick=()=>{
-        showOnly("clienteView");
-        state.project.view.lastTab=p.id;
-        renderClient();
-        personTabs();
-      };
+      nameEl.onclick=()=>{ state.project.view.lastTab=p.id; renderClient(); personTabs(); };
       chip.appendChild(nameEl);
       const del=el("button","del","X"); del.title="Eliminar"; del.onclick=()=>{ if((state.sessions?.[p.id]||[]).length){ alert("No se puede eliminar: tiene acciones."); return; } state.staff=state.staff.filter(x=>x.id!==p.id); touch(); personTabs(); renderClient(); renderStaffList(); };
       chip.appendChild(del); box.appendChild(chip);
@@ -1475,7 +1423,7 @@
 
   function wire(){
     const $id=(x)=>document.getElementById(x);
-    const o=$id("openFile"); if(o) o.onchange=(e)=>{ const f=e.target.files?.[0]; if(f) importJSONFile(f,()=>{ ensureDefaults(); ensureLinkFields(); personTabs(); renderClient(); renderStatus(); renderStaffList(); }); };
+    const o=$id("openFile"); if(o) o.onchange=(e)=>{ const f=e.target.files?.[0]; if(f) importJSONFile(f,()=>{ ensureDefaults(); ensureSessionDefaults(); personTabs(); renderClient(); renderStatus(); renderStaffList(); }); };
     const nb=$id("newBtn"); if(nb) nb.onclick=()=>{ localStorage.clear(); location.reload(); };
     const sb=$id("saveBtn"); if(sb) sb.onclick=exportJSON;
 
@@ -1505,7 +1453,7 @@
     try{
       const raw=localStorage.getItem("eventplan.autosave"); if(raw){ const obj=JSON.parse(raw); if(obj&&obj.project) Object.assign(state,obj); }
     }catch(e){}
-    ensureDefaults(); ensureLinkFields();
+    ensureDefaults(); ensureSessionDefaults();
     const pN=document.getElementById("pNombre"); if(pN) pN.value=state.project.nombre||"";
     const pF=document.getElementById("pFecha"); if(pF) pF.value=state.project.fecha||"";
     const pT=document.getElementById("pTz"); if(pT) pT.value=state.project.tz||"Europe/Madrid";

@@ -383,6 +383,20 @@ table.matlist td.act{width:120px}
   font-size:.9rem;
   opacity:.85;
 }
+.task-type-selector{
+  display:flex;
+  gap:.5rem;
+  margin-top:.35rem;
+}
+.task-type-option{
+  display:flex;
+  align-items:center;
+  gap:.3rem;
+  font-size:.85rem;
+}
+.task-type-option input[type="radio"]{
+  margin:0;
+}
 .matlist{font-size:.9rem;}
 .matlist td.act{
   width:auto;
