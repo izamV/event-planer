@@ -16,10 +16,16 @@
     }
   }
   window.addAfterIndex = (pid, idx, durMin)=>{
-    const list=getPersonSessions(pid); const d=Math.max(5,Math.round((parseInt(durMin||15,10)||15)/5)*5);
+    const list=getPersonSessions(pid); const wasEmpty=!list.length;
+    const d=Math.max(5,Math.round((parseInt(durMin||15,10)||15)/5)*5);
     const start = (idx!=null && idx>=0 && list[idx]) ? list[idx].endMin : (list.length? list[list.length-1].endMin : (state.horaInicial?.[pid]??9*60));
-    const s={ id:"S_"+(++__S_SEQ), startMin:start, endMin:start+d, taskTypeId:null, locationId:null, vehicleId:null, materiales:[], comentario:"", prevId:null, nextId:null, inheritFromId:null };
+    const initialLoc = wasEmpty ? (state.localizacionInicial?.[pid] ?? null) : null;
+    const s={ id:"S_"+(++__S_SEQ), startMin:start, endMin:start+d, taskTypeId:null, locationId:initialLoc, vehicleId:null, materiales:[], comentario:"", prevId:null, nextId:null, inheritFromId:null };
     list.splice((idx!=null && idx>=0)? idx+1 : list.length, 0, s);
+    if(wasEmpty){
+      state.localizacionInicial=state.localizacionInicial||{};
+      state.localizacionInicial[pid]=s.locationId||null;
+    }
     reflow(pid); recomputeLocations(pid); touch();
   };
   window.deleteAtIndex = (pid, idx)=>{

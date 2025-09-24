@@ -6,7 +6,7 @@
     root.state = {
       project:{ nombre:"Proyecto", fecha:"", tz:"Europe/Madrid", updatedAt:"", view:{ lastTab:"CLIENTE", subGantt:"Gantt", selectedIndex:{} } },
       locations:[], taskTypes:[], materialTypes:[], vehicles:[], staff:[],
-      sessions:{ CLIENTE:[] }, horaInicial:{}
+      sessions:{ CLIENTE:[] }, horaInicial:{}, localizacionInicial:{}
     };
   }
   // Autosave
@@ -30,10 +30,17 @@
   window.ensureDefaults = ()=>{
     const st=state;
     st.taskTypes=st.taskTypes||[]; st.locations=st.locations||[]; st.materialTypes=st.materialTypes||[];
-    st.vehicles=st.vehicles||[]; st.staff=st.staff||[]; st.sessions=st.sessions||{CLIENTE:[]}; st.horaInicial=st.horaInicial||{};
+    st.vehicles=st.vehicles||[]; st.staff=st.staff||[]; st.sessions=st.sessions||{CLIENTE:[]};
+    st.horaInicial=st.horaInicial||{}; st.localizacionInicial=st.localizacionInicial||{};
     st.project=st.project||{nombre:"Proyecto",fecha:"",tz:"Europe/Madrid",updatedAt:"",view:{}}; st.project.view=st.project.view||{};
     st.project.view.lastTab=st.project.view.lastTab||"CLIENTE"; st.project.view.subGantt=st.project.view.subGantt||"Gantt"; st.project.view.selectedIndex=st.project.view.selectedIndex||{};
     if(!st.sessions.CLIENTE) st.sessions.CLIENTE=[];
+    Object.keys(st.sessions).forEach(pid=>{
+      const list=st.sessions[pid]||[];
+      if(list.length && typeof st.localizacionInicial[pid]==="undefined"){
+        st.localizacionInicial[pid]=list[0]?.locationId||null;
+      }
+    });
     try{ ensureSeedsCore(); }catch(e){}
   };
 
