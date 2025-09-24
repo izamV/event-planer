@@ -195,27 +195,6 @@ table.matlist td.act{width:120px}
   font-size:.85rem;
   opacity:.8;
 }
-.link-hints{
-  display:flex;
-  flex-direction:column;
-  gap:.25rem;
-  width:100%;
-}
-.link-hint{
-  display:flex;
-  align-items:center;
-  gap:.35rem;
-  flex-wrap:wrap;
-}
-.link-hint span:first-child{
-  flex:1 1 auto;
-}
-.link-hint .btn.danger{
-  margin-left:auto;
-}
-.link-hint .icon-btn{
-  min-width:2rem;
-}
 .transport-flow{
   margin-top:.25rem;
   width:100%;
@@ -238,20 +217,7 @@ table.matlist td.act{width:120px}
   justify-content:space-between;
   gap:.5rem;
 }
-.link-controls{
-  display:flex;
-  gap:.35rem;
-}
-.under-slot{
-  margin-top:.35rem;
-}
-.link-tags{
-  display:flex;
-  flex-wrap:wrap;
-  align-items:center;
-  gap:.35rem;
-  font-size:.85rem;
-}
+
 
 /* === Vista de mapa interactivo === */
 .map-wrapper{
