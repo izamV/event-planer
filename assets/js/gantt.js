@@ -1,6 +1,14 @@
 ﻿(function(){
   "use strict";
-  const colorFor=(taskId)=> state.taskTypes.find(t=>t.id===taskId)?.color || "#60a5fa";
+  const ACTION_TYPE_TRANSPORT = window.ACTION_TYPE_TRANSPORT || "TRANSPORTE";
+  const colorForSession=(session)=>{
+    if(session.actionType===ACTION_TYPE_TRANSPORT) return "#22d3ee";
+    return state.taskTypes.find(t=>t.id===session.taskTypeId)?.color || "#60a5fa";
+  };
+  const labelForSession=(session)=>{
+    const catalogName=state.taskTypes.find(t=>t.id===session.taskTypeId)?.nombre || "";
+    return (session.actionName||"").trim() || catalogName || "Sin tarea";
+  };
   const shortTag=(tid)=> tid===TASK_MONTAGE?"M":(tid===TASK_DESMONT?"D":"");
 
   window.buildGantt=(cont,persons)=>{
@@ -18,8 +26,8 @@
         const seg=el("div","seg");
         seg.style.left=((s.startMin/1440)*100)+"%";
         seg.style.width=(((s.endMin-s.startMin)/1440)*100)+"%";
-        seg.style.background=colorFor(s.taskTypeId);
-        const label=(state.taskTypes.find(t=>t.id===s.taskTypeId)?.nombre||"");
+        seg.style.background=colorForSession(s);
+        const label=labelForSession(s);
         seg.title=toHHMM(s.startMin)+"-"+toHHMM(s.endMin)+" · "+label;
         seg.appendChild(el("div","meta",(shortTag(s.taskTypeId)?shortTag(s.taskTypeId)+" · ":"")+label));
         track.appendChild(seg);
@@ -41,7 +49,7 @@
       (state.sessions?.[p.id]||[]).forEach(s=>{
         const item=el("div","item");
         item.appendChild(el("div",null, toHHMM(s.startMin)+"–"+toHHMM(s.endMin)));
-        item.appendChild(el("div",null, [ toName(s.taskTypeId,state.taskTypes), toName(s.locationId,state.locations) ].join(" · ")));
+        item.appendChild(el("div",null, [ labelForSession(s), toName(s.locationId,state.locations) ].join(" · ")));
         body.appendChild(item);
         if(s.materiales?.length){
           const txt=s.materiales.map(m=> (toName(m.materialTypeId,state.materialTypes))+" x "+(m.cantidad||0)).join(", ");
@@ -61,7 +69,7 @@
     const tb=el("tbody");
     persons.forEach(p=>{
       const arr=(state.sessions?.[p.id]||[]); let mins=0; const byTask=new Map();
-      arr.forEach(s=>{ const d=(s.endMin-s.startMin); mins+=d; const k=state.taskTypes.find(t=>t.id===s.taskTypeId)?.nombre||"Sin tarea"; byTask.set(k,(byTask.get(k)||0)+d); });
+      arr.forEach(s=>{ const d=(s.endMin-s.startMin); mins+=d; const k=labelForSession(s) || "Sin tarea"; byTask.set(k,(byTask.get(k)||0)+d); });
       const tr=el("tr");
       tr.appendChild(el("td",null,p.nombre)); tr.appendChild(el("td",null,String(arr.length))); tr.appendChild(el("td",null,String(mins)));
       tr.appendChild(el("td",null, Array.from(byTask.entries()).map(([k,v])=>k+": "+v+"m").join(" · ") || "-"));

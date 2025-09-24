@@ -1,4 +1,4 @@
-﻿(function(){
+(function(){
   "use strict";
   window.$ = (sel)=>document.querySelector(sel);
   window.el = function(tag, cls, text){
@@ -25,6 +25,8 @@
 (function(){
   "use strict";
   const root = window;
+  if(typeof root.ACTION_TYPE_TRANSPORT === "undefined") root.ACTION_TYPE_TRANSPORT = "TRANSPORTE";
+  if(typeof root.ACTION_TYPE_NORMAL === "undefined") root.ACTION_TYPE_NORMAL = "NORMAL";
   // Estado básico
   if(!root.state){
     root.state = {
@@ -54,6 +56,14 @@
   window.ensureDefaults = ()=>{
     const st=state;
     st.taskTypes=st.taskTypes||[]; st.locations=st.locations||[]; st.materialTypes=st.materialTypes||[];
+    st.taskTypes.forEach(t=>{
+      const isTransport=t.id===root.EP_IDS?.TRANSP;
+      if(typeof t.tipo==="undefined") t.tipo = isTransport?root.ACTION_TYPE_TRANSPORT:root.ACTION_TYPE_NORMAL;
+      if(typeof t.quien==="undefined") t.quien = t.locked?"SISTEMA":"CLIENTE";
+      if(!t.color){
+        t.color = t.tipo===root.ACTION_TYPE_TRANSPORT?"#22d3ee":"#60a5fa";
+      }
+    });
     st.vehicles=st.vehicles||[]; st.staff=st.staff||[]; st.sessions=st.sessions||{CLIENTE:[]};
     st.horaInicial=st.horaInicial||{}; st.localizacionInicial=st.localizacionInicial||{};
     st.project=st.project||{nombre:"Proyecto",fecha:"",tz:"Europe/Madrid",updatedAt:"",view:{}}; st.project.view=st.project.view||{};
@@ -99,6 +109,8 @@
 
 (function(){
   "use strict";
+  const ACTION_TYPE_TRANSPORT = window.ACTION_TYPE_TRANSPORT || "TRANSPORTE";
+  const ACTION_TYPE_NORMAL = window.ACTION_TYPE_NORMAL || "NORMAL";
   let __S_SEQ = 0;
   const personIds = ()=> ["CLIENTE",...(state.staff||[]).map(p=>p.id)];
   window.getPersonSessions = (pid)=>{ state.sessions[pid]=state.sessions[pid]||[]; return state.sessions[pid]; };
@@ -119,7 +131,7 @@
     const d=Math.max(5,Math.round((parseInt(durMin||15,10)||15)/5)*5);
     const start = (idx!=null && idx>=0 && list[idx]) ? list[idx].endMin : (list.length? list[list.length-1].endMin : (state.horaInicial?.[pid]??9*60));
     const initialLoc = wasEmpty ? (state.localizacionInicial?.[pid] ?? null) : null;
-    const s={ id:"S_"+(++__S_SEQ), startMin:start, endMin:start+d, taskTypeId:null, locationId:initialLoc, vehicleId:null, materiales:[], comentario:"", prevId:null, nextId:null, inheritFromId:null };
+    const s={ id:"S_"+(++__S_SEQ), startMin:start, endMin:start+d, taskTypeId:null, actionType:ACTION_TYPE_NORMAL, actionName:"", locationId:initialLoc, vehicleId:null, materiales:[], comentario:"", prevId:null, nextId:null, inheritFromId:null };
     list.splice((idx!=null && idx>=0)? idx+1 : list.length, 0, s);
     if(wasEmpty){
       state.localizacionInicial=state.localizacionInicial||{};
@@ -148,11 +160,13 @@
     const list=getPersonSessions(pid); let cur=null;
     for(let i=0;i<list.length;i++){
       const s=list[i];
-      if(i===0 && s.taskTypeId!==TASK_TRANSP){
+      if(i===0 && s.actionType!==ACTION_TYPE_TRANSPORT){
         cur = s.locationId || cur;
+        state.localizacionInicial=state.localizacionInicial||{};
+        state.localizacionInicial[pid]=cur||null;
         continue;
       }
-      if(s.taskTypeId===TASK_TRANSP){
+      if(s.actionType===ACTION_TYPE_TRANSPORT){
         // destino elegido por usuario
         cur = s.locationId || cur;
       }else{
@@ -173,6 +187,11 @@
         if(typeof s.linkPrevRole==="undefined") s.linkPrevRole=null;
         if(typeof s.linkNextRole==="undefined") s.linkNextRole=null;
         s.materiales=s.materiales||[];
+        if(typeof s.actionType==="undefined") s.actionType = (s.taskTypeId===TASK_TRANSP)?ACTION_TYPE_TRANSPORT:ACTION_TYPE_NORMAL;
+        if(typeof s.actionName==="undefined"){
+          const fallback=state.taskTypes?.find(t=>t.id===s.taskTypeId)?.nombre || "";
+          s.actionName=fallback;
+        }
       });
     });
     personIds().forEach(pid=>{
@@ -184,14 +203,18 @@
           }else{
             s.linkPrevRole="pre-target";
           }
-        }else s.linkPrevRole=null;
+        }else{
+          s.linkPrevRole=null;
+        }
         if(s.nextId){
           if(s.inheritFromId && s.inheritFromId===s.nextId){
             s.linkNextRole="post-target";
           }else{
             s.linkNextRole="post-main";
           }
-        }else s.linkNextRole=null;
+        }else{
+          s.linkNextRole=null;
+        }
       });
     });
   };
@@ -226,7 +249,7 @@
   window.setPrevLink = (mainId,dstId)=>{
     const c=canLinkPrev(mainId,dstId); if(!c.ok) return c;
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
-    d.taskTypeId = TASK_MONTAGE; d.materiales = (m.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)}));
+    d.taskTypeId = TASK_MONTAGE; d.actionType = ACTION_TYPE_NORMAL; d.materiales = (m.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)}));
     d.inheritFromId = m.id; m.prevId = d.id; d.nextId = m.id;
     m.linkPrevRole="pre-main"; d.linkNextRole="post-target";
     const msg=formatLinkMessage("prev", findSessionById(mainId), findSessionById(dstId));
@@ -235,7 +258,7 @@
   window.setPostLink = (mainId,dstId)=>{
     const c=canLinkPost(mainId,dstId); if(!c.ok) return c;
     const A=findSessionById(mainId), B=findSessionById(dstId); const m=A.session, d=B.session;
-    d.taskTypeId = TASK_DESMONT; d.materiales = []; d.inheritFromId=null;
+    d.taskTypeId = TASK_DESMONT; d.actionType = ACTION_TYPE_NORMAL; d.materiales = []; d.inheritFromId=null;
     m.nextId = d.id; d.prevId = m.id;
     m.linkNextRole="post-main"; d.linkPrevRole="pre-target";
     const msg=formatLinkMessage("post", findSessionById(mainId), findSessionById(dstId));
@@ -244,13 +267,13 @@
   window.clearPrevLink = (mainId)=>{
     const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
     const m=A.session; const P=findSessionById(m.prevId);
-    if(P){ const s=P.session; if(s.taskTypeId===TASK_MONTAGE){ s.taskTypeId=null; s.materiales=[]; s.inheritFromId=null; } s.nextId=null; s.linkNextRole=null; }
+    if(P){ const s=P.session; if(s.taskTypeId===TASK_MONTAGE){ s.taskTypeId=null; s.actionType=ACTION_TYPE_NORMAL; s.materiales=[]; s.inheritFromId=null; } s.nextId=null; s.linkNextRole=null; }
     m.prevId=null; m.linkPrevRole=null; touch(); return {ok:true};
   };
   window.clearPostLink = (mainId)=>{
     const A=findSessionById(mainId); if(!A) return {ok:false,msg:"No encontrado"};
     const m=A.session; const N=findSessionById(m.nextId);
-    if(N){ const s=N.session; if(s.taskTypeId===TASK_DESMONT){ s.taskTypeId=null; } s.prevId=null; s.linkPrevRole=null; }
+    if(N){ const s=N.session; if(s.taskTypeId===TASK_DESMONT){ s.taskTypeId=null; s.actionType=ACTION_TYPE_NORMAL; } s.prevId=null; s.linkPrevRole=null; }
     m.nextId=null; m.linkNextRole=null; touch(); return {ok:true};
   };
   window.resyncPrevMaterials = (montajeId)=>{
@@ -258,509 +281,6 @@
     const s=M.session; if(s.taskTypeId!==TASK_MONTAGE || !s.nextId) return {ok:false,msg:"No es Montaje PRE"};
     const main=findSessionById(s.nextId)?.session; if(!main) return {ok:false,msg:"Sin destino"};
     s.materiales=(main.materiales||[]).map(x=>({materialTypeId:x.materialTypeId,cantidad:Number(x.cantidad||0)})); s.inheritFromId=main.id; touch(); return {ok:true};
-  };
-})();
-
-
-(function(){
-  "use strict";
-  const colorFor=(taskId)=> state.taskTypes.find(t=>t.id===taskId)?.color || "#60a5fa";
-  const shortTag=(tid)=> tid===TASK_MONTAGE?"M":(tid===TASK_DESMONT?"D":"");
-
-  window.buildGantt=(cont,persons)=>{
-    cont.innerHTML="";
-    const wrap=el("div","gwrap");
-    const head=el("div","gantt-header"); head.appendChild(el("div",null,"Persona"));
-    const hours=el("div","gantt-hours"); for(let h=0;h<24;h++) hours.appendChild(el("div",null,String(h).padStart(2,"0")+":00"));
-    head.appendChild(hours); wrap.appendChild(head);
-
-    persons.forEach(p=>{
-      const row=el("div","gantt-row");
-      row.appendChild(el("div",null,p.nombre));
-      const track=el("div","gantt-track");
-      (state.sessions?.[p.id]||[]).forEach(s=>{
-        const seg=el("div","seg");
-        seg.style.left=((s.startMin/1440)*100)+"%";
-        seg.style.width=(((s.endMin-s.startMin)/1440)*100)+"%";
-        seg.style.background=colorFor(s.taskTypeId);
-        const label=(state.taskTypes.find(t=>t.id===s.taskTypeId)?.nombre||"");
-        seg.title=toHHMM(s.startMin)+"-"+toHHMM(s.endMin)+" · "+label;
-        seg.appendChild(el("div","meta",(shortTag(s.taskTypeId)?shortTag(s.taskTypeId)+" · ":"")+label));
-        track.appendChild(seg);
-      });
-      row.appendChild(track); wrap.appendChild(row);
-    });
-    cont.appendChild(wrap);
-  };
-
-  const toName = (id,arr,key="id",field="nombre")=> arr.find(x=>x[key]===id)?.[field]||"-";
-
-  window.buildCards=(cont,persons)=>{
-    cont.innerHTML="";
-    const tools=el("div","row"); const pr=el("button","btn small","Imprimir"); pr.onclick=()=>window.print(); tools.appendChild(pr); cont.appendChild(tools);
-    const list=el("div","cardlist");
-    persons.forEach(p=>{
-      const card=el("div","card"); card.appendChild(el("h4",null,p.nombre));
-      const body=el("div");
-      (state.sessions?.[p.id]||[]).forEach(s=>{
-        const item=el("div","item");
-        item.appendChild(el("div",null, toHHMM(s.startMin)+"–"+toHHMM(s.endMin)));
-        item.appendChild(el("div",null, [ toName(s.taskTypeId,state.taskTypes), toName(s.locationId,state.locations) ].join(" · ")));
-        body.appendChild(item);
-        if(s.materiales?.length){
-          const txt=s.materiales.map(m=> (toName(m.materialTypeId,state.materialTypes))+" x "+(m.cantidad||0)).join(", ");
-          body.appendChild(el("div","mini","Materiales: "+txt));
-        }
-        if(s.comentario){ body.appendChild(el("div","mini","Notas: "+s.comentario)); }
-      });
-      card.appendChild(body); list.appendChild(card);
-    });
-    cont.appendChild(list);
-  };
-
-  window.buildSummary=(cont,persons)=>{
-    cont.innerHTML="";
-    const tbl=el("table"); const thead=el("thead"); const trh=el("tr");
-    ["Persona","Acciones","Min totales","Por tarea"].forEach(h=>trh.appendChild(el("th",null,h))); thead.appendChild(trh); tbl.appendChild(thead);
-    const tb=el("tbody");
-    persons.forEach(p=>{
-      const arr=(state.sessions?.[p.id]||[]); let mins=0; const byTask=new Map();
-      arr.forEach(s=>{ const d=(s.endMin-s.startMin); mins+=d; const k=state.taskTypes.find(t=>t.id===s.taskTypeId)?.nombre||"Sin tarea"; byTask.set(k,(byTask.get(k)||0)+d); });
-      const tr=el("tr");
-      tr.appendChild(el("td",null,p.nombre)); tr.appendChild(el("td",null,String(arr.length))); tr.appendChild(el("td",null,String(mins)));
-      tr.appendChild(el("td",null, Array.from(byTask.entries()).map(([k,v])=>k+": "+v+"m").join(" · ") || "-"));
-      tb.appendChild(tr);
-    });
-    tbl.appendChild(tb); cont.appendChild(tbl);
-  };
-})();
-
-
-(function(){
-  "use strict";
-  const autoGrow=(ta)=>{ ta.style.height="auto"; ta.style.height=(ta.scrollHeight)+"px"; };
-  const lockChip=(txt)=>{ const d=el("div","lock-chip"); d.appendChild(el("span","ico","🔒")); d.appendChild(el("span",null,txt||"-")); return d; };
-
-  const linkMode={active:false,kind:null,sourceId:null}; // kind: "prev" | "post"
-
-  function banner(container){
-    const b=el("div","toolbar");
-    b.appendChild(el("span",null, linkMode.kind==="prev"?"Selecciona fila vacia para PRE (Montaje por defecto)":"Selecciona fila vacia para POST (Desmontaje por defecto)"));
-    const cancel=el("button","btn danger small","Cancelar"); cancel.style.marginLeft=".5rem"; cancel.onclick=()=>{ linkMode.active=false; renderClient(); };
-    b.appendChild(cancel); container.prepend(b);
-  }
-
-  window.renderVerticalEditor = (container,pid)=>{
-    ensureLinkFields();
-    container.innerHTML="";
-    if(linkMode.active) banner(container);
-
-    const list=getPersonSessions(pid);
-    const first=list[0];
-    if(first && first.taskTypeId===TASK_TRANSP){
-      first.taskTypeId=null;
-      first.vehicleId=null;
-      recomputeLocations(pid);
-      touch();
-    }
-    if(!list.length){ container.appendChild(el("div","mini","No hay acciones.")); return; }
-
-    const computeTransportFlow=(targetIdx)=>{
-      let cur=null;
-      for(let i=0;i<list.length;i++){
-        const item=list[i];
-        if(i===targetIdx){
-          return {origin:cur,destination:item.locationId||cur};
-        }
-        if(i===0 && item.taskTypeId!==TASK_TRANSP){
-          cur=item.locationId||cur;
-          continue;
-        }
-        if(item.taskTypeId===TASK_TRANSP){
-          const dest=item.locationId||cur;
-          cur=dest;
-        }else{
-          cur=item.locationId||cur;
-        }
-      }
-      const fallback=list[targetIdx];
-      return {origin:cur,destination:fallback?.locationId||cur};
-    };
-
-    list.forEach((s,idx)=>{
-      const row=el("div","vrow"); if(getSelected(pid)===idx) row.classList.add("selected");
-
-      // En modo vinculo, permitir elegir fila vacia
-      if(linkMode.active){
-        row.classList.add("canlink");
-        row.onclick=()=>{
-          let result;
-          if(linkMode.kind==="prev"){ result=setPrevLink(linkMode.sourceId,s.id); }
-          else { result=setPostLink(linkMode.sourceId,s.id); }
-          if(!result.ok){ alert(result.msg); return; }
-          if(result.msg && window.flashStatus){ window.flashStatus(result.msg); }
-          linkMode.active=false; renderClient();
-        };
-      }
-
-      // Selector, hora y duracion
-      const sel=el("div","selcell");
-      const header=el("div","slot-index");
-      const bSel=el("button","btn chip",String(idx+1)); bSel.title="Seleccionar"; bSel.onclick=(e)=>{ e.stopPropagation(); setSelected(pid,idx); renderVerticalEditor(container,pid); };
-      const bDel=el("button","btn danger icon","✕"); bDel.title="Eliminar"; bDel.onclick=(e)=>{ e.stopPropagation(); deleteAtIndex(pid,idx); renderVerticalEditor(container,pid); };
-      const range=el("span","time-range", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
-      const timeAdjust=el("div","time-adjust");
-      const doResize=(delta)=>{
-        const cur=s.endMin-s.startMin;
-        const target=Math.max(5, cur+delta);
-        const nd=Math.max(5, Math.round(target/5)*5);
-        if(nd===cur) return;
-        resizeSegment(pid, idx, nd);
-        renderVerticalEditor(container,pid);
-      };
-      const plus=el("button","icon-btn","+"); plus.title="Aumentar duracion"; plus.onclick=(e)=>{ e.stopPropagation(); doResize(5); };
-      const minus=el("button","icon-btn","−"); minus.title="Reducir duracion"; minus.onclick=(e)=>{ e.stopPropagation(); doResize(-5); };
-      timeAdjust.appendChild(plus); timeAdjust.appendChild(minus);
-      const timeDisplay=el("div","time-display");
-      const timeMain=el("div","time-main");
-      timeMain.appendChild(range); timeMain.appendChild(timeAdjust);
-      timeDisplay.appendChild(timeMain);
-      const durationHint=el("div","duration-hint","Duración: "+String(s.endMin-s.startMin)+" min");
-      timeDisplay.appendChild(durationHint);
-      header.appendChild(bSel); header.appendChild(bDel); header.appendChild(timeDisplay);
-      sel.appendChild(header);
-
-      const timeTools=el("div","time-tools");
-      const linkHints=el("div","link-hints");
-      const formatSessionLabel=(info,fallback)=> info? `${info.pid} · #${info.index+1}` : (fallback? `#${fallback}` : "#?");
-      const selfInfo={pid,index:idx,session:s};
-      const addLinkHint=(label,text,onRemove,extra=[])=>{
-        const wrap=el("div","duration-hint link-hint");
-        wrap.appendChild(el("span",null,`${label}: ${text}`));
-        extra.forEach(btn=>wrap.appendChild(btn));
-        const close=el("button","btn danger small","✕"); close.title="Quitar vinculo"; close.onclick=(e)=>{ e.stopPropagation(); onRemove(); };
-        wrap.appendChild(close);
-        linkHints.appendChild(wrap);
-      };
-      if(s.prevId){
-        const other=findSessionById(s.prevId);
-        if(s.linkPrevRole==="pre-main"){
-          addLinkHint("Vinculación PRE", `${formatSessionLabel(other,s.prevId)} → ${formatSessionLabel(selfInfo,s.id)}`, ()=>{ clearPrevLink(s.id); renderClient(); });
-        }else if(s.linkPrevRole==="pre-target"){
-          addLinkHint("Vinculación PRE", `${formatSessionLabel(selfInfo,s.id)} → ${formatSessionLabel(other,s.prevId)}`, ()=>{ clearPostLink(s.prevId); renderClient(); });
-        }
-      }
-      if(s.nextId){
-        const other=findSessionById(s.nextId);
-        if(s.linkNextRole==="post-main"){
-          addLinkHint("Vinculación POST", `${formatSessionLabel(selfInfo,s.id)} → ${formatSessionLabel(other,s.nextId)}`, ()=>{ clearPostLink(s.id); renderClient(); });
-        }else if(s.linkNextRole==="post-target"){
-          const extras=[];
-          if(s.taskTypeId===TASK_MONTAGE){
-            const r=el("button","icon-btn ghost","⟳"); r.title="Re-sincronizar materiales del principal"; r.onclick=(e)=>{ e.stopPropagation(); resyncPrevMaterials(s.id); renderClient(); }; extras.push(r);
-          }
-          addLinkHint("Vinculación POST", `${formatSessionLabel(other,s.nextId)} → ${formatSessionLabel(selfInfo,s.id)}`, ()=>{ clearPrevLink(s.nextId); renderClient(); }, extras);
-        }
-      }
-      if(linkHints.childElementCount){
-        timeTools.appendChild(linkHints);
-        sel.appendChild(timeTools);
-      }
-
-      const linkWrap=el("div","link-controls under-slot");
-      const bPrev=el("button","icon-btn ghost","◀"); bPrev.title="Vincular PRE"; bPrev.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="prev"; linkMode.sourceId=s.id; renderClient(); };
-      const bPost=el("button","icon-btn ghost","▶"); bPost.title="Vincular POST"; bPost.onclick=(e)=>{ e.stopPropagation(); linkMode.active=true; linkMode.kind="post"; linkMode.sourceId=s.id; renderClient(); };
-      linkWrap.appendChild(bPrev); linkWrap.appendChild(bPost);
-      sel.appendChild(linkWrap);
-      row.appendChild(sel);
-
-      // Tarea
-      const tdiv=el("div","param task-cell"); tdiv.innerHTML="<label>Tarea</label>";
-      const tsel=el("select","input"); const t0=el("option",null,"- seleccionar -"); t0.value=""; tsel.appendChild(t0);
-      const allowMont=!!s.nextId; const allowDesm=!!s.prevId;
-      state.taskTypes.forEach(t=>{
-        const isM=t.id===TASK_MONTAGE, isD=t.id===TASK_DESMONT;
-        if(isM && !allowMont) return;
-        if(isD && !allowDesm) return;
-        if(idx===0 && t.id===TASK_TRANSP) return;
-        const o=el("option",null,t.nombre); o.value=t.id; if(t.id===s.taskTypeId) o.selected=true; tsel.appendChild(o);
-      });
-      tsel.onchange=()=>{
-        const v=tsel.value||null;
-        if(v===TASK_MONTAGE && !allowMont){ alert("Montaje solo si la fila es PRE de otra."); tsel.value=s.taskTypeId||""; return; }
-        if(v===TASK_DESMONT && !allowDesm){ alert("Desmontaje solo si la fila es POST de otra."); tsel.value=s.taskTypeId||""; return; }
-        s.taskTypeId=v;
-        if(v===TASK_MONTAGE && s.nextId){
-          const target=findSessionById(s.nextId)?.session;
-          s.inheritFromId=s.nextId;
-          s.materiales=(target?.materiales||[]).map(m=>({materialTypeId:m.materialTypeId,cantidad:Number(m.cantidad||0)}));
-        }else{
-          s.inheritFromId=null;
-        }
-        if(v!==TASK_TRANSP){ s.vehicleId=null; }
-        touch(); renderVerticalEditor(container,pid);
-      };
-      tdiv.appendChild(tsel); row.appendChild(tdiv);
-
-      // Localización (bloqueada salvo primera o transporte)
-      const ldiv=el("div","param location-cell");
-      if(idx===0 && s.taskTypeId!==TASK_TRANSP){
-        ldiv.innerHTML="<label>Localizacion inicial</label>";
-        const lsel=el("select","input"); const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
-        state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===s.locationId) o.selected=true; lsel.appendChild(o); });
-        lsel.onchange=()=>{ s.locationId=lsel.value||null; recomputeLocations(pid);
-          state.localizacionInicial=state.localizacionInicial||{};
-          state.localizacionInicial[pid]=s.locationId||null;
-          touch(); renderVerticalEditor(container,pid);
-        };
-        ldiv.appendChild(lsel);
-      }else if(s.taskTypeId===TASK_TRANSP){
-        ldiv.classList.add("stacked");
-        ldiv.innerHTML="<label>Destino</label>";
-        const lsel=el("select","input"); const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
-        state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===s.locationId) o.selected=true; lsel.appendChild(o); });
-        lsel.onchange=()=>{ s.locationId=lsel.value||null; recomputeLocations(pid); touch(); renderVerticalEditor(container,pid); };
-        ldiv.appendChild(lsel);
-        const flow=computeTransportFlow(idx);
-        const originName=state.locations.find(x=>x.id===flow.origin)?.nombre || "-";
-        const destName=state.locations.find(x=>x.id===flow.destination)?.nombre || "-";
-        const flowText=`Origen → ${originName} · Destino → ${destName}`;
-        ldiv.appendChild(el("div","duration-hint transport-flow",flowText));
-      }else{
-        const name=state.locations.find(x=>x.id===s.locationId)?.nombre || "-";
-        ldiv.appendChild(lockChip(name));
-      }
-      row.appendChild(ldiv);
-
-      // Vehiculo (solo Transporte)
-      const vdiv=el("div","param vehicle-cell"); vdiv.innerHTML="<label>Vehiculo</label>";
-      if(s.taskTypeId===TASK_TRANSP){
-        const vsel=el("select","input"); const v0=el("option",null,"- seleccionar -"); v0.value=""; vsel.appendChild(v0);
-        state.vehicles.forEach(v=>{ const o=el("option",null,v.nombre); o.value=v.id; if(v.id===s.vehicleId) o.selected=true; vsel.appendChild(o); });
-        if(!s.vehicleId){ const def=state.vehicles.find(v=>v.id==="V_WALK")?.id; if(def) s.vehicleId=def; }
-        vsel.onchange=()=>{ s.vehicleId=vsel.value||null; touch(); };
-        vdiv.appendChild(vsel);
-      }else vdiv.appendChild(lockChip("No aplica"));
-      row.appendChild(vdiv);
-
-      // Materiales + Vínculos
-      const mdiv=el("div","param materials-cell");
-      const mheader=el("div","materials-header");
-      const mlabel=el("label",null,"Materiales");
-      mheader.appendChild(mlabel); mdiv.appendChild(mheader);
-
-      const selected = (getSelected(pid)===idx);
-      if(selected){
-        const add=el("div","materials-add");
-        const msel=el("select","input"); const m0=el("option",null, state.materialTypes.length? "- seleccionar -" : "No hay materiales (usar Catalogo)"); m0.value=""; msel.appendChild(m0);
-        state.materialTypes.forEach(m=>{ if(!(s.materiales||[]).some(x=>x.materialTypeId===m.id)){ const o=el("option",null,m.nombre); o.value=m.id; msel.appendChild(o); } });
-        const q=el("input","input"); q.type="number"; q.min="0"; q.step="1"; q.placeholder="1";
-        const addB=el("button","btn small","Añadir");
-        const doAdd=()=>{ const id=msel.value; let n=parseInt(q.value||"1",10); if(!id){ alert("Selecciona un material"); return; } if(!Number.isInteger(n)||n<0) n=1;
-          s.materiales=s.materiales||[]; const ex=s.materiales.find(mm=>mm.materialTypeId===id);
-          if(ex){ ex.cantidad=(parseInt(ex.cantidad||"0",10)||0)+n; } else { s.materiales.push({materialTypeId:id,cantidad:n}); }
-          touch(); renderVerticalEditor(container,pid);
-        };
-        addB.onclick=(e)=>{ e.stopPropagation(); doAdd(); }; q.onkeydown=(e)=>{ if(e.key==="Enter"){ e.preventDefault(); doAdd(); } };
-        add.appendChild(msel); add.appendChild(q); add.appendChild(addB); mdiv.appendChild(add);
-
-        const tbl=el("table","matlist"); const thead=el("thead"); const hr=el("tr");
-        ["Material","Cantidad","Acciones"].forEach(h=>hr.appendChild(el("th",null,h))); thead.appendChild(hr); tbl.appendChild(thead);
-        const tb=el("tbody");
-        const inc=(id)=>{ const it=s.materiales.find(x=>x.materialTypeId===id); if(!it) return; it.cantidad=(parseInt(it.cantidad||"0",10)||0)+1; touch(); renderVerticalEditor(container,pid); };
-        const dec=(id)=>{ const it=s.materiales.find(x=>x.materialTypeId===id); if(!it) return; const v=(parseInt(it.cantidad||"0",10)||0)-1; if(v<=0){ s.materiales=s.materiales.filter(x=>x.materialTypeId!==id); } else { it.cantidad=v; } touch(); renderVerticalEditor(container,pid); };
-        const del=(id)=>{ s.materiales=s.materiales.filter(x=>x.materialTypeId!==id); touch(); renderVerticalEditor(container,pid); };
-        (s.materiales||[]).forEach(m=>{
-          const tr=el("tr");
-          tr.appendChild(el("td",null, state.materialTypes.find(mt=>mt.id===m.materialTypeId)?.nombre || "Material"));
-          tr.appendChild(el("td","qty", String(parseInt(m.cantidad||"0",10)||0)));
-          const act=el("td","act");
-          const p=el("button","icon-btn ghost","+"); p.title="Sumar"; p.onclick=(e)=>{ e.stopPropagation(); inc(m.materialTypeId); };
-          const r=el("button","icon-btn ghost","−"); r.title="Restar"; r.onclick=(e)=>{ e.stopPropagation(); dec(m.materialTypeId); };
-          const d=el("button","icon-btn danger","✕"); d.title="Eliminar"; d.onclick=(e)=>{ e.stopPropagation(); del(m.materialTypeId); };
-          act.appendChild(p); act.appendChild(r); act.appendChild(d); tr.appendChild(act); tb.appendChild(tr);
-        });
-        if(!(s.materiales||[]).length){ const tr=el("tr"); const td=el("td"); td.colSpan=3; td.textContent="Sin materiales"; tr.appendChild(td); tb.appendChild(tr); }
-        tbl.appendChild(tb); mdiv.appendChild(tbl);
-      }else{
-        const txt=(s.materiales||[]).map(m=> (state.materialTypes.find(mt=>mt.id===m.materialTypeId)?.nombre||"Material")+" x "+(parseInt(m.cantidad||"0",10)||0)).join(", ");
-        mdiv.appendChild(el("div","materials-summary", txt||"Sin materiales"));
-      }
-      row.appendChild(mdiv);
-
-      // Notas
-      const ndiv=el("div","param notes-cell");
-      const nlabel=el("label",null,"Notas");
-      const ta=el("textarea","input notes"); ta.rows=3; ta.value=String(s.comentario||""); ta.placeholder="Comentarios de la acción";
-      ta.oninput=()=>{ s.comentario=ta.value; touch(); autoGrow(ta); };
-      setTimeout(()=>autoGrow(ta),0);
-      ndiv.appendChild(nlabel);
-      ndiv.appendChild(ta); row.appendChild(ndiv);
-
-      container.appendChild(row);
-    });
-
-    document.onkeydown=(e)=>{ if(e.key==="Escape" && linkMode.active){ linkMode.active=false; renderClient(); } };
-  };
-
-  // Render de vista completo (toolbar mínima incluida)
-  window.renderClient = ()=>{
-    const pid = (state.project.view.lastTab==="CLIENTE" || !state.project.view.lastTab)? "CLIENTE" : state.project.view.lastTab;
-    const root=$("#clienteView"); if(!root) return;
-    root.innerHTML="";
-    const sessions=getPersonSessions(pid);
-    state.localizacionInicial=state.localizacionInicial||{};
-    const bar=el("div","toolbar");
-    if(!sessions.length){
-      const lbl=el("span","mini","Hora inicio");
-      const ti=el("input","input"); ti.type="time";
-      ti.value = toHHMM(state.horaInicial?.[pid] ?? 9*60);
-      ti.onchange=()=>{
-        state.horaInicial[pid]=toMin(ti.value||"09:00");
-        if(sessions.length){
-          rebaseTo(pid,state.horaInicial[pid]);
-        }else{
-          touch();
-        }
-        renderClient();
-      };
-      const lloc=el("span","mini","Localizacion inicio");
-      const lsel=el("select","input");
-      const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
-      const initialLoc=state.localizacionInicial?.[pid] ?? null;
-      state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===initialLoc) o.selected=true; lsel.appendChild(o); });
-      lsel.onchange=()=>{
-        state.localizacionInicial[pid]=lsel.value||null;
-        touch();
-        renderClient();
-      };
-      bar.appendChild(lbl); bar.appendChild(ti); bar.appendChild(lloc); bar.appendChild(lsel);
-    }
-    const add=el("button","btn primary","Crear accion");
-    add.onclick=()=>{ const idx=getSelected(pid); addAfterIndex(pid, (idx==null? -1: idx), 15); renderClient(); };
-    bar.appendChild(add); root.appendChild(bar);
-
-    const v=el("div","vlist"); root.appendChild(v);
-    renderVerticalEditor(v,pid);
-  };
-})();
-
-
-
-(function(){
-  "use strict";
-  function emitChanged(){ document.dispatchEvent(new Event("catalogs-changed")); touch(); }
-
-  function lockMark(tr, locked){ if(!locked) return; tr.setAttribute("data-locked","true"); tr.querySelectorAll("button,input,select").forEach(n=>{ if(n.tagName==="BUTTON" && /eliminar/i.test(n.textContent||"")) n.disabled=true; else if(n.tagName!=="BUTTON") n.disabled=true; }); }
-
-  window.openCatLoc = (cont)=>{
-    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Localizaciones"));
-    const add=el("div","row");
-    const name=el("input","input"); name.placeholder="Nombre";
-    const latlng=el("input","input"); latlng.placeholder="lat,long";
-    const b=el("button","btn","Añadir");
-    b.onclick=()=>{
-      const n=name.value.trim();
-      const raw=(latlng.value||"").trim();
-      const parts=raw.split(",").map(s=>s.trim()).filter(Boolean);
-      const lat=parts[0];
-      const lng=parts[1];
-      const latNum=Number(lat);
-      const lngNum=Number(lng);
-      if(!n) return;
-      if(parts.length<2 || !lat || !lng || !Number.isFinite(latNum) || !Number.isFinite(lngNum) || Math.abs(latNum)>90 || Math.abs(lngNum)>180){
-        latlng.classList.add("err");
-        if(typeof flashStatus==="function") flashStatus("Introduce latitud y longitud válidas");
-        return;
-      }
-      latlng.classList.remove("err");
-      state.locations.push({id:"L_"+(state.locations.length+1), nombre:n, lat:lat, lng:lng});
-      name.value=""; latlng.value=""; emitChanged(); openCatLoc(cont);
-    };
-    add.appendChild(name); add.appendChild(latlng); add.appendChild(b); cont.appendChild(add);
-
-    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
-    state.locations.forEach((l,i)=>{
-      const tr=el("tr");
-      const n=el("input","input"); n.value=l.nombre; n.oninput=()=>{ l.nombre=n.value; touch(); };
-      const ll=el("input","input"); ll.value=(l.lat||"")+","+(l.lng||""); ll.oninput=()=>{ const sp=(ll.value||"").split(","); l.lat=(sp[0]||"").trim(); l.lng=(sp[1]||"").trim(); touch(); };
-      const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.locations.splice(i,1); emitChanged(); openCatLoc(cont); };
-      tr.appendChild(n); tr.appendChild(ll); tr.appendChild(del); tb.appendChild(tr);
-    });
-    cont.appendChild(tbl);
-  };
-
-  window.openCatTask = (cont)=>{
-    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Tareas"));
-    const add=el("div","row");
-    const name=el("input","input"); name.placeholder="Nombre";
-    const color=el("input","input"); color.type="color"; color.value="#60a5fa";
-    const b=el("button","btn","Añadir");
-    b.onclick=()=>{
-      const n=name.value.trim(); if(!n) return;
-      state.taskTypes.push({id:"T_"+(state.taskTypes.length+1), nombre:n, color:color.value||"#60a5fa", locked:false});
-      name.value=""; emitChanged(); openCatTask(cont);
-    };
-    add.appendChild(name); add.appendChild(color); add.appendChild(b); cont.appendChild(add);
-
-    // Lista
-    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
-    // Orden: bloqueados primero
-    const order=id=>({[TASK_TRANSP]:0,[TASK_MONTAGE]:1,[TASK_DESMONT]:2}[id]??9);
-    [...state.taskTypes].sort((a,b)=> (a.locked===b.locked? order(a.id)-order(b.id) : (a.locked?-1:1)) || (a.nombre||"").localeCompare(b.nombre||"") )
-      .forEach((t,idx)=>{
-        const i= state.taskTypes.findIndex(x=>x.id===t.id);
-        const tr=el("tr");
-        const n=el("input","input"); n.value=t.nombre; n.oninput=()=>{ t.nombre=n.value; touch(); };
-        const c=el("input","input"); c.type="color"; c.value=t.color||"#60a5fa"; c.oninput=()=>{ t.color=c.value; touch(); };
-        const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.taskTypes.splice(i,1); emitChanged(); openCatTask(cont); };
-        tr.appendChild(n); tr.appendChild(c); tr.appendChild(del); tb.appendChild(tr);
-        lockMark(tr, !!t.locked);
-      });
-    cont.appendChild(tbl);
-  };
-
-  window.openCatMat = (cont)=>{
-    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Materiales"));
-    const add=el("div","row");
-    const name=el("input","input"); name.placeholder="Nombre";
-    const b=el("button","btn","Añadir");
-    b.onclick=()=>{
-      const n=name.value.trim(); if(!n) return;
-      state.materialTypes.push({id:"MT_"+(state.materialTypes.length+1), nombre:n});
-      name.value=""; emitChanged(); openCatMat(cont);
-    };
-    add.appendChild(name); add.appendChild(b); cont.appendChild(add);
-
-    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
-    state.materialTypes.forEach((t,i)=>{
-      const tr=el("tr");
-      const n=el("input","input"); n.value=t.nombre; n.oninput=()=>{ t.nombre=n.value; touch(); };
-      const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.materialTypes.splice(i,1); emitChanged(); openCatMat(cont); };
-      tr.appendChild(n); tr.appendChild(del); tb.appendChild(tr);
-    });
-    cont.appendChild(tbl);
-  };
-
-  window.openCatVeh = (cont)=>{
-    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Vehículos"));
-    const add=el("div","row");
-    const name=el("input","input"); name.placeholder="Nombre";
-    const b=el("button","btn","Añadir");
-    b.onclick=()=>{ const n=name.value.trim(); if(!n) return; state.vehicles.push({id:"V_"+(state.vehicles.length+1), nombre:n, locked:false}); name.value=""; emitChanged(); openCatVeh(cont); };
-    add.appendChild(name); add.appendChild(b); cont.appendChild(add);
-
-    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
-    [...state.vehicles].sort((a,b)=> (a.locked===b.locked?0:(a.locked?-1:1)) || (a.nombre||"").localeCompare(b.nombre||""))
-      .forEach((v,idx)=>{
-        const i= state.vehicles.findIndex(x=>x.id===v.id);
-        const tr=el("tr");
-        const n=el("input","input"); n.value=v.nombre; n.oninput=()=>{ v.nombre=n.value; touch(); };
-        const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.vehicles.splice(i,1); emitChanged(); openCatVeh(cont); };
-        tr.appendChild(n); tr.appendChild(del); tb.appendChild(tr);
-        lockMark(tr, !!v.locked);
-      });
-    cont.appendChild(tbl);
   };
 })();
 
@@ -824,6 +344,7 @@
   const MAX_ZOOM = 18;
   const DEFAULT_VIEW = { lat: 40.4168, lng: -3.7038, zoom: 12 };
   const SPEED_STEPS = [0.5, 1, 2, 4];
+  const ACTION_TYPE_TRANSPORT = window.ACTION_TYPE_TRANSPORT || "TRANSPORTE";
   const COLOR_PALETTE = [
     "#38bdf8", "#f472b6", "#34d399", "#f97316",
     "#c084fc", "#22d3ee", "#facc15", "#fb7185",
@@ -888,10 +409,14 @@
     return valid;
   };
 
+  const sessionLabel = (s)=>{
+    const catalogName = state.taskTypes?.find(t=>t.id===s.taskTypeId)?.nombre || "";
+    return (s.actionName||"").trim() || catalogName || "Sin tarea";
+  };
+
   const buildTimeline = (locations)=>{
     const locMap = new Map(locations.map(l=>[l.id, l]));
     const persons = [{ id:"CLIENTE", nombre:"Cliente" }, ...(state.staff||[])];
-    const taskNames = new Map((state.taskTypes||[]).map(t=>[t.id, t.nombre]));
     const tracks=[];
     let earliest=Infinity;
     let latest=-Infinity;
@@ -905,7 +430,7 @@
         const end=Number(s.endMin);
         if(!Number.isFinite(start) || !Number.isFinite(end) || end<=start) return;
         const dest = s.locationId ? locMap.get(s.locationId) : null;
-        const isTransport = (s.taskTypeId === TASK_TRANSP);
+        const isTransport = (s.actionType === ACTION_TYPE_TRANSPORT);
         let from = lastLoc || dest || null;
         let to = dest || from;
         if(isTransport){
@@ -927,7 +452,7 @@
             return;
           }
         }
-        const label = taskNames.get(s.taskTypeId) || "";
+        const label = sessionLabel(s);
         segments.push({ start, end, from, to, isTransport, session:s, label, location:dest });
         if(dest) lastLoc = dest;
         earliest = Math.min(earliest, start);
@@ -1377,6 +902,496 @@
 
 (function(){
   "use strict";
+  const ACTION_TYPE_TRANSPORT = window.ACTION_TYPE_TRANSPORT || "TRANSPORTE";
+  const colorForSession=(session)=>{
+    if(session.actionType===ACTION_TYPE_TRANSPORT) return "#22d3ee";
+    return state.taskTypes.find(t=>t.id===session.taskTypeId)?.color || "#60a5fa";
+  };
+  const labelForSession=(session)=>{
+    const catalogName=state.taskTypes.find(t=>t.id===session.taskTypeId)?.nombre || "";
+    return (session.actionName||"").trim() || catalogName || "Sin tarea";
+  };
+  const shortTag=(tid)=> tid===TASK_MONTAGE?"M":(tid===TASK_DESMONT?"D":"");
+
+  window.buildGantt=(cont,persons)=>{
+    cont.innerHTML="";
+    const wrap=el("div","gwrap");
+    const head=el("div","gantt-header"); head.appendChild(el("div",null,"Persona"));
+    const hours=el("div","gantt-hours"); for(let h=0;h<24;h++) hours.appendChild(el("div",null,String(h).padStart(2,"0")+":00"));
+    head.appendChild(hours); wrap.appendChild(head);
+
+    persons.forEach(p=>{
+      const row=el("div","gantt-row");
+      row.appendChild(el("div",null,p.nombre));
+      const track=el("div","gantt-track");
+      (state.sessions?.[p.id]||[]).forEach(s=>{
+        const seg=el("div","seg");
+        seg.style.left=((s.startMin/1440)*100)+"%";
+        seg.style.width=(((s.endMin-s.startMin)/1440)*100)+"%";
+        seg.style.background=colorForSession(s);
+        const label=labelForSession(s);
+        seg.title=toHHMM(s.startMin)+"-"+toHHMM(s.endMin)+" · "+label;
+        seg.appendChild(el("div","meta",(shortTag(s.taskTypeId)?shortTag(s.taskTypeId)+" · ":"")+label));
+        track.appendChild(seg);
+      });
+      row.appendChild(track); wrap.appendChild(row);
+    });
+    cont.appendChild(wrap);
+  };
+
+  const toName = (id,arr,key="id",field="nombre")=> arr.find(x=>x[key]===id)?.[field]||"-";
+
+  window.buildCards=(cont,persons)=>{
+    cont.innerHTML="";
+    const tools=el("div","row"); const pr=el("button","btn small","Imprimir"); pr.onclick=()=>window.print(); tools.appendChild(pr); cont.appendChild(tools);
+    const list=el("div","cardlist");
+    persons.forEach(p=>{
+      const card=el("div","card"); card.appendChild(el("h4",null,p.nombre));
+      const body=el("div");
+      (state.sessions?.[p.id]||[]).forEach(s=>{
+        const item=el("div","item");
+        item.appendChild(el("div",null, toHHMM(s.startMin)+"–"+toHHMM(s.endMin)));
+        item.appendChild(el("div",null, [ labelForSession(s), toName(s.locationId,state.locations) ].join(" · ")));
+        body.appendChild(item);
+        if(s.materiales?.length){
+          const txt=s.materiales.map(m=> (toName(m.materialTypeId,state.materialTypes))+" x "+(m.cantidad||0)).join(", ");
+          body.appendChild(el("div","mini","Materiales: "+txt));
+        }
+        if(s.comentario){ body.appendChild(el("div","mini","Notas: "+s.comentario)); }
+      });
+      card.appendChild(body); list.appendChild(card);
+    });
+    cont.appendChild(list);
+  };
+
+  window.buildSummary=(cont,persons)=>{
+    cont.innerHTML="";
+    const tbl=el("table"); const thead=el("thead"); const trh=el("tr");
+    ["Persona","Acciones","Min totales","Por tarea"].forEach(h=>trh.appendChild(el("th",null,h))); thead.appendChild(trh); tbl.appendChild(thead);
+    const tb=el("tbody");
+    persons.forEach(p=>{
+      const arr=(state.sessions?.[p.id]||[]); let mins=0; const byTask=new Map();
+      arr.forEach(s=>{ const d=(s.endMin-s.startMin); mins+=d; const k=labelForSession(s) || "Sin tarea"; byTask.set(k,(byTask.get(k)||0)+d); });
+      const tr=el("tr");
+      tr.appendChild(el("td",null,p.nombre)); tr.appendChild(el("td",null,String(arr.length))); tr.appendChild(el("td",null,String(mins)));
+      tr.appendChild(el("td",null, Array.from(byTask.entries()).map(([k,v])=>k+": "+v+"m").join(" · ") || "-"));
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb); cont.appendChild(tbl);
+  };
+})();
+
+
+(function(){
+  "use strict";
+  const ACTION_TYPE_TRANSPORT = window.ACTION_TYPE_TRANSPORT || "TRANSPORTE";
+  const ACTION_TYPE_NORMAL = window.ACTION_TYPE_NORMAL || "NORMAL";
+  function emitChanged(){ document.dispatchEvent(new Event("catalogs-changed")); touch(); }
+
+  function lockMark(tr, locked){ if(!locked) return; tr.setAttribute("data-locked","true"); tr.querySelectorAll("button,input,select").forEach(n=>{ if(n.tagName==="BUTTON" && /eliminar/i.test(n.textContent||"")) n.disabled=true; else if(n.tagName!=="BUTTON") n.disabled=true; }); }
+
+  window.openCatLoc = (cont)=>{
+    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Localizaciones"));
+    const add=el("div","row");
+    const name=el("input","input"); name.placeholder="Nombre";
+    const latlng=el("input","input"); latlng.placeholder="lat,long";
+    const b=el("button","btn","Añadir");
+    b.onclick=()=>{
+      const n=name.value.trim();
+      const raw=(latlng.value||"").trim();
+      const parts=raw.split(",").map(s=>s.trim()).filter(Boolean);
+      const lat=parts[0];
+      const lng=parts[1];
+      const latNum=Number(lat);
+      const lngNum=Number(lng);
+      if(!n) return;
+      if(parts.length<2 || !lat || !lng || !Number.isFinite(latNum) || !Number.isFinite(lngNum) || Math.abs(latNum)>90 || Math.abs(lngNum)>180){
+        latlng.classList.add("err");
+        if(typeof flashStatus==="function") flashStatus("Introduce latitud y longitud válidas");
+        return;
+      }
+      latlng.classList.remove("err");
+      state.locations.push({id:"L_"+(state.locations.length+1), nombre:n, lat:lat, lng:lng});
+      name.value=""; latlng.value=""; emitChanged(); openCatLoc(cont);
+    };
+    add.appendChild(name); add.appendChild(latlng); add.appendChild(b); cont.appendChild(add);
+
+    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
+    state.locations.forEach((l,i)=>{
+      const tr=el("tr");
+      const n=el("input","input"); n.value=l.nombre; n.oninput=()=>{ l.nombre=n.value; touch(); };
+      const ll=el("input","input"); ll.value=(l.lat||"")+","+(l.lng||""); ll.oninput=()=>{ const sp=(ll.value||"").split(","); l.lat=(sp[0]||"").trim(); l.lng=(sp[1]||"").trim(); touch(); };
+      const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.locations.splice(i,1); emitChanged(); openCatLoc(cont); };
+      tr.appendChild(n); tr.appendChild(ll); tr.appendChild(del); tb.appendChild(tr);
+    });
+    cont.appendChild(tbl);
+  };
+
+  window.openCatTask = (cont)=>{
+    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Tareas"));
+    const add=el("div","row");
+    const name=el("input","input"); name.placeholder="Nombre";
+    const color=el("input","input"); color.type="color"; color.value="#60a5fa";
+    const typeSel=el("select","input");
+    [
+      {label:"Normal", value:ACTION_TYPE_NORMAL},
+      {label:"Transporte", value:ACTION_TYPE_TRANSPORT}
+    ].forEach(opt=>{ const o=el("option",null,opt.label); o.value=opt.value; typeSel.appendChild(o); });
+    const b=el("button","btn","Añadir");
+    b.onclick=()=>{
+      const n=name.value.trim(); if(!n) return;
+      state.taskTypes.push({
+        id:"T_"+(state.taskTypes.length+1),
+        nombre:n,
+        color:color.value||"#60a5fa",
+        locked:false,
+        tipo:typeSel.value||ACTION_TYPE_NORMAL,
+        quien:"CLIENTE"
+      });
+      name.value=""; emitChanged(); openCatTask(cont);
+    };
+    add.appendChild(name); add.appendChild(color); add.appendChild(typeSel); add.appendChild(b); cont.appendChild(add);
+
+    // Lista
+    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
+    // Orden: bloqueados primero
+    const order=id=>({[TASK_TRANSP]:0,[TASK_MONTAGE]:1,[TASK_DESMONT]:2}[id]??9);
+    [...state.taskTypes].sort((a,b)=> (a.locked===b.locked? order(a.id)-order(b.id) : (a.locked?-1:1)) || (a.nombre||"").localeCompare(b.nombre||"") )
+      .forEach((t,idx)=>{
+        const i= state.taskTypes.findIndex(x=>x.id===t.id);
+        const tr=el("tr");
+        const n=el("input","input"); n.value=t.nombre; n.oninput=()=>{ t.nombre=n.value; touch(); };
+        const c=el("input","input"); c.type="color"; c.value=t.color||"#60a5fa"; c.oninput=()=>{ t.color=c.value; touch(); };
+        const tipo=el("span","mini",t.tipo||ACTION_TYPE_NORMAL);
+        const quien=el("span","mini",t.quien||"CLIENTE");
+        const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.taskTypes.splice(i,1); emitChanged(); openCatTask(cont); };
+        tr.appendChild(n); tr.appendChild(c); tr.appendChild(tipo); tr.appendChild(quien); tr.appendChild(del); tb.appendChild(tr);
+        lockMark(tr, !!t.locked);
+      });
+    cont.appendChild(tbl);
+  };
+
+  window.openCatMat = (cont)=>{
+    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Materiales"));
+    const add=el("div","row");
+    const name=el("input","input"); name.placeholder="Nombre";
+    const b=el("button","btn","Añadir");
+    b.onclick=()=>{
+      const n=name.value.trim(); if(!n) return;
+      state.materialTypes.push({id:"MT_"+(state.materialTypes.length+1), nombre:n});
+      name.value=""; emitChanged(); openCatMat(cont);
+    };
+    add.appendChild(name); add.appendChild(b); cont.appendChild(add);
+
+    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
+    state.materialTypes.forEach((t,i)=>{
+      const tr=el("tr");
+      const n=el("input","input"); n.value=t.nombre; n.oninput=()=>{ t.nombre=n.value; touch(); };
+      const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.materialTypes.splice(i,1); emitChanged(); openCatMat(cont); };
+      tr.appendChild(n); tr.appendChild(del); tb.appendChild(tr);
+    });
+    cont.appendChild(tbl);
+  };
+
+  window.openCatVeh = (cont)=>{
+    cont.innerHTML=""; cont.appendChild(el("h3",null,"Catálogo: Vehículos"));
+    const add=el("div","row");
+    const name=el("input","input"); name.placeholder="Nombre";
+    const b=el("button","btn","Añadir");
+    b.onclick=()=>{ const n=name.value.trim(); if(!n) return; state.vehicles.push({id:"V_"+(state.vehicles.length+1), nombre:n, locked:false}); name.value=""; emitChanged(); openCatVeh(cont); };
+    add.appendChild(name); add.appendChild(b); cont.appendChild(add);
+
+    const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
+    [...state.vehicles].sort((a,b)=> (a.locked===b.locked?0:(a.locked?-1:1)) || (a.nombre||"").localeCompare(b.nombre||""))
+      .forEach((v,idx)=>{
+        const i= state.vehicles.findIndex(x=>x.id===v.id);
+        const tr=el("tr");
+        const n=el("input","input"); n.value=v.nombre; n.oninput=()=>{ v.nombre=n.value; touch(); };
+        const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.vehicles.splice(i,1); emitChanged(); openCatVeh(cont); };
+        tr.appendChild(n); tr.appendChild(del); tb.appendChild(tr);
+        lockMark(tr, !!v.locked);
+      });
+    cont.appendChild(tbl);
+  };
+})();
+
+
+(function(){
+  "use strict";
+  const autoGrow=(ta)=>{ ta.style.height="auto"; ta.style.height=(ta.scrollHeight)+"px"; };
+  const lockChip=(txt)=>{ const d=el("div","lock-chip"); d.appendChild(el("span","ico","🔒")); d.appendChild(el("span",null,txt||"-")); return d; };
+  const ACTION_TYPE_TRANSPORT="TRANSPORTE";
+  const ACTION_TYPE_NORMAL="NORMAL";
+  window.ACTION_TYPE_TRANSPORT = window.ACTION_TYPE_TRANSPORT || ACTION_TYPE_TRANSPORT;
+  window.ACTION_TYPE_NORMAL = window.ACTION_TYPE_NORMAL || ACTION_TYPE_NORMAL;
+
+  const ensureActionDefaults=(action)=>{
+    if(!action) return;
+    if(typeof action.tipo==="undefined") action.tipo=ACTION_TYPE_NORMAL;
+    if(typeof action.quien==="undefined") action.quien="CLIENTE";
+    if(!action.color){
+      action.color = action.tipo===ACTION_TYPE_TRANSPORT?"#22d3ee":"#60a5fa";
+    }
+  };
+
+  const ensureSessionDefaults=(s)=>{
+    if(!s) return;
+    if(typeof s.actionType==="undefined"){
+      if(s.taskTypeId===TASK_TRANSP){
+        s.actionType=ACTION_TYPE_TRANSPORT;
+      }else{
+        s.actionType=ACTION_TYPE_NORMAL;
+      }
+    }
+    if(typeof s.actionName==="undefined"){
+      const fallback=state.taskTypes?.find(t=>t.id===s.taskTypeId)?.nombre || "";
+      s.actionName=fallback;
+    }
+    if(s.actionType===ACTION_TYPE_TRANSPORT && !s.taskTypeId){
+      s.taskTypeId=TASK_TRANSP;
+    }
+  };
+
+  const ensureActionEntry=(pid,s)=>{
+    ensureSessionDefaults(s);
+    const name=(s.actionName||"").trim();
+    const tipo=s.actionType===ACTION_TYPE_TRANSPORT?ACTION_TYPE_TRANSPORT:ACTION_TYPE_NORMAL;
+    const owner=pid||"CLIENTE";
+    if(!name){
+      if(tipo===ACTION_TYPE_TRANSPORT){
+        s.taskTypeId=TASK_TRANSP;
+      }else if(s.taskTypeId===TASK_TRANSP){
+        s.taskTypeId=null;
+      }
+      return;
+    }
+    state.taskTypes=state.taskTypes||[];
+    const existing=state.taskTypes.find(t=> (t.nombre||"").trim().toLowerCase()===name.toLowerCase() && (t.quien||owner)===owner && (t.tipo||ACTION_TYPE_NORMAL)===tipo);
+    if(existing){
+      ensureActionDefaults(existing);
+      existing.nombre=name;
+      existing.tipo=tipo;
+      existing.quien=owner;
+      existing.color = tipo===ACTION_TYPE_TRANSPORT?"#22d3ee":(existing.color||"#60a5fa");
+      s.taskTypeId=existing.id;
+      return;
+    }
+    let target=null;
+    if(s.taskTypeId){
+      target=state.taskTypes.find(t=>t.id===s.taskTypeId);
+    }
+    if(!target || target.locked){
+      const uniqueId=`ACT_${Math.random().toString(36).slice(2,8)}${Date.now().toString(36)}`;
+      target={id:target&&target.locked?uniqueId:(s.taskTypeId||uniqueId)};
+      state.taskTypes.push(target);
+    }
+    target.nombre=name;
+    target.tipo=tipo;
+    target.quien=owner;
+    target.color = tipo===ACTION_TYPE_TRANSPORT?"#22d3ee":"#60a5fa";
+    target.locked=false;
+    s.taskTypeId=target.id;
+  };
+
+
+  window.renderVerticalEditor = (container,pid)=>{
+    container.innerHTML="";
+  
+    const list=getPersonSessions(pid);
+    list.forEach(ensureSessionDefaults);
+    const first=list[0];
+    if(first && first.actionType===ACTION_TYPE_TRANSPORT){
+      first.actionType=ACTION_TYPE_NORMAL;
+      first.vehicleId=null;
+      first.taskTypeId=null;
+      ensureActionEntry(pid,first);
+      recomputeLocations(pid);
+      touch();
+    }
+    if(!list.length){ container.appendChild(el("div","mini","No hay acciones.")); return; }
+  
+    const computeTransportFlow=(targetIdx)=>{
+      let cur=null;
+      for(let i=0;i<list.length;i++){
+        const item=list[i];
+        if(i===targetIdx){
+          return {origin:cur,destination:item.locationId||cur};
+        }
+        if(i===0 && item.actionType!==ACTION_TYPE_TRANSPORT){
+          cur=item.locationId||cur;
+          continue;
+        }
+        if(item.actionType===ACTION_TYPE_TRANSPORT){
+          const dest=item.locationId||cur;
+          cur=dest;
+        }else{
+          cur=item.locationId||cur;
+        }
+      }
+      const fallback=list[targetIdx];
+      return {origin:cur,destination=fallback?.locationId||cur};
+    };
+  
+    list.forEach((s,idx)=>{
+      ensureSessionDefaults(s);
+      const row=el("div","vrow"); if(getSelected(pid)===idx) row.classList.add("selected");
+  
+      const sel=el("div","selcell");
+      const header=el("div","slot-index");
+      const bSel=el("button","btn chip",String(idx+1)); bSel.title="Seleccionar"; bSel.onclick=(e)=>{ e.stopPropagation(); setSelected(pid,idx); renderVerticalEditor(container,pid); };
+      const bDel=el("button","btn danger icon","✕"); bDel.title="Eliminar"; bDel.onclick=(e)=>{ e.stopPropagation(); deleteAtIndex(pid,idx); renderClient(); };
+      const range=el("span","time-range", toHHMM(s.startMin)+"-"+toHHMM(s.endMin));
+      const timeAdjust=el("div","time-adjust");
+      const doResize=(delta)=>{
+        const cur=s.endMin-s.startMin;
+        const target=Math.max(5, cur+delta);
+        const nd=Math.max(5, Math.round(target/5)*5);
+        if(nd===cur) return;
+        resizeSegment(pid, idx, nd);
+        renderVerticalEditor(container,pid);
+      };
+      const plus=el("button","icon-btn","+"); plus.title="Aumentar duracion"; plus.onclick=(e)=>{ e.stopPropagation(); doResize(5); };
+      const minus=el("button","icon-btn","−"); minus.title="Reducir duracion"; minus.onclick=(e)=>{ e.stopPropagation(); doResize(-5); };
+      timeAdjust.appendChild(plus); timeAdjust.appendChild(minus);
+      const timeDisplay=el("div","time-display");
+      const timeMain=el("div","time-main");
+      timeMain.appendChild(range); timeMain.appendChild(timeAdjust);
+      timeDisplay.appendChild(timeMain);
+      const durationHint=el("div","duration-hint","Duración: "+String(s.endMin-s.startMin)+" min");
+      timeDisplay.appendChild(durationHint);
+      header.appendChild(bSel); header.appendChild(bDel); header.appendChild(timeDisplay);
+      sel.appendChild(header);
+      row.appendChild(sel);
+  
+      const tdiv=el("div","param task-cell"); tdiv.appendChild(el("label",null,"Tarea"));
+      const nameInput=el("input","input"); nameInput.type="text"; nameInput.placeholder="Nombre de la acción"; nameInput.value=s.actionName||"";
+      nameInput.oninput=()=>{
+        s.actionName=nameInput.value;
+        ensureActionEntry(pid,s);
+        touch();
+      };
+      nameInput.onblur=()=>{ ensureActionEntry(pid,s); touch(); renderVerticalEditor(container,pid); };
+      tdiv.appendChild(nameInput);
+      const typeWrap=el("div","action-type-picker");
+      const mkRadio=(label,value)=>{
+        const wrap=el("label","radio-option");
+        const input=el("input"); input.type="radio"; input.name=`action-type-${pid}-${idx}`; input.value=value;
+        if(s.actionType===value) input.checked=true;
+        input.onchange=()=>{
+          s.actionType=value;
+          if(value!==ACTION_TYPE_TRANSPORT){
+            if(s.vehicleId){ s.vehicleId=null; }
+          }
+          ensureActionEntry(pid,s);
+          recomputeLocations(pid);
+          touch();
+          renderVerticalEditor(container,pid);
+        };
+        wrap.appendChild(input);
+        wrap.appendChild(el("span",null,label));
+        return wrap;
+      };
+      typeWrap.appendChild(mkRadio("Normal",ACTION_TYPE_NORMAL));
+      typeWrap.appendChild(mkRadio("Transporte",ACTION_TYPE_TRANSPORT));
+      tdiv.appendChild(typeWrap);
+      row.appendChild(tdiv);
+  
+      const ldiv=el("div","param location-cell");
+      if(idx===0 && s.actionType!==ACTION_TYPE_TRANSPORT){
+        ldiv.innerHTML="<label>Localizacion inicial</label>";
+        const name=state.locations.find(x=>x.id===s.locationId)?.nombre || "-";
+        ldiv.appendChild(lockChip(name));
+      }else if(s.actionType===ACTION_TYPE_TRANSPORT){
+        ldiv.classList.add("stacked");
+        ldiv.innerHTML="<label>Destino</label>";
+        const lsel=el("select","input"); const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
+        state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===s.locationId) o.selected=true; lsel.appendChild(o); });
+        lsel.onchange=()=>{ s.locationId=lsel.value||null; recomputeLocations(pid); touch(); renderVerticalEditor(container,pid); };
+        ldiv.appendChild(lsel);
+        const flow=computeTransportFlow(idx);
+        const originName=state.locations.find(x=>x.id===flow.origin)?.nombre || "-";
+        const destName=state.locations.find(x=>x.id===flow.destination)?.nombre || "-";
+        const flowText=`Origen → ${originName} · Destino → ${destName}`;
+        ldiv.appendChild(el("div","duration-hint transport-flow",flowText));
+      }else{
+        const name=state.locations.find(x=>x.id===s.locationId)?.nombre || "-";
+        ldiv.appendChild(lockChip(name));
+      }
+      row.appendChild(ldiv);
+  
+      const vdiv=el("div","param vehicle-cell"); vdiv.innerHTML="<label>Vehiculo</label>";
+      if(s.actionType===ACTION_TYPE_TRANSPORT){
+        const vsel=el("select","input"); const v0=el("option",null,"- seleccionar -"); v0.value=""; vsel.appendChild(v0);
+        state.vehicles.forEach(v=>{ const o=el("option",null,v.nombre); o.value=v.id; if(v.id===s.vehicleId) o.selected=true; vsel.appendChild(o); });
+        if(!s.vehicleId){ const def=state.vehicles.find(v=>v.id==="V_WALK")?.id; if(def) s.vehicleId=def; }
+        vsel.onchange=()=>{ s.vehicleId=vsel.value||null; touch(); };
+        vdiv.appendChild(vsel);
+      }else vdiv.appendChild(lockChip("No aplica"));
+      row.appendChild(vdiv);
+  
+      const mdiv=el("div","param materials-cell");
+      const mheader=el("div","materials-header");
+      const mlabel=el("label",null,"Materiales");
+      mheader.appendChild(mlabel); mdiv.appendChild(mheader);
+      const txt=(s.materiales||[]).map(m=> (state.materialTypes.find(mt=>mt.id===m.materialTypeId)?.nombre||"Material")+" x "+(parseInt(m.cantidad||"0",10)||0)).join(", ");
+      mdiv.appendChild(el("div","materials-summary", txt||"Sin materiales"));
+      row.appendChild(mdiv);
+  
+      const ndiv=el("div","param notes-cell");
+      const nlabel=el("label",null,"Notas");
+      const ta=el("textarea","input"); ta.rows=3; ta.value=String(s.comentario||""); ta.placeholder="Comentarios de la accion";
+      ta.oninput=()=>{ s.comentario=ta.value; touch(); autoGrow(ta); };
+      setTimeout(()=>autoGrow(ta),0); ndiv.appendChild(nlabel); ndiv.appendChild(ta); row.appendChild(ndiv);
+  
+      container.appendChild(row);
+    });
+  };
+
+  window.renderClient = ()=>{
+    const pid = (state.project.view.lastTab==="CLIENTE" || !state.project.view.lastTab)? "CLIENTE" : state.project.view.lastTab;
+    const root=$("#clienteView"); if(!root) return;
+    root.innerHTML="";
+    const sessions=getPersonSessions(pid);
+    state.localizacionInicial=state.localizacionInicial||{};
+    const bar=el("div","toolbar");
+    if(!sessions.length){
+      const lbl=el("span","mini","Hora inicio");
+      const ti=el("input","input"); ti.type="time";
+      ti.value = toHHMM(state.horaInicial?.[pid] ?? 9*60);
+      ti.onchange=()=>{
+        state.horaInicial[pid]=toMin(ti.value||"09:00");
+        if(sessions.length){
+          rebaseTo(pid,state.horaInicial[pid]);
+        }else{
+          touch();
+        }
+        renderClient();
+      };
+      const lloc=el("span","mini","Localizacion inicio");
+      const lsel=el("select","input");
+      const l0=el("option",null,"- seleccionar -"); l0.value=""; lsel.appendChild(l0);
+      const initialLoc=state.localizacionInicial?.[pid] ?? null;
+      state.locations.forEach(l=>{ const o=el("option",null,l.nombre); o.value=l.id; if(l.id===initialLoc) o.selected=true; lsel.appendChild(o); });
+      lsel.onchange=()=>{
+        state.localizacionInicial[pid]=lsel.value||null;
+        touch();
+        renderClient();
+      };
+      bar.appendChild(lbl); bar.appendChild(ti); bar.appendChild(lloc); bar.appendChild(lsel);
+    }
+    const add=el("button","btn primary","Crear accion");
+    add.onclick=()=>{ const idx=getSelected(pid); addAfterIndex(pid, (idx==null? -1: idx), 15); renderClient(); };
+    bar.appendChild(add); root.appendChild(bar);
+
+    const v=el("div","vlist"); root.appendChild(v);
+    renderVerticalEditor(v,pid);
+  };
+})();
+
+
+
+(function(){
+  "use strict";
   const clienteMeta={id:"CLIENTE",nombre:"Cliente",rol:"CLIENTE"};
   function showOnly(id){
     ["clienteView","catalogView","resultView"].forEach(v=>{ const n=document.getElementById(v); if(n) n.style.display=(v===id)?"":"none"; });
@@ -1388,12 +1403,7 @@
     const mk=(p,isActive)=>{
       const b=el("button","tab"+(isActive?" active":""), p.nombre);
       b.dataset.pid=p.id;
-      b.onclick=()=>{
-        showOnly("clienteView");
-        state.project.view.lastTab=p.id;
-        renderClient();
-        personTabs();
-      };
+      b.onclick=()=>{ state.project.view.lastTab=p.id; renderClient(); personTabs(); };
       tabs.appendChild(b);
     };
     const activeId = (state.project.view.lastTab==="CLIENTE"||state.project.view.lastTab==="cliente") ? "CLIENTE" : state.project.view.lastTab;
@@ -1421,12 +1431,7 @@
       const chip=el("div","staffchip");
       const nameEl = el("span",null,p.nombre);
       nameEl.style.cursor="pointer";
-      nameEl.onclick=()=>{
-        showOnly("clienteView");
-        state.project.view.lastTab=p.id;
-        renderClient();
-        personTabs();
-      };
+      nameEl.onclick=()=>{ state.project.view.lastTab=p.id; renderClient(); personTabs(); };
       chip.appendChild(nameEl);
       const del=el("button","del","X"); del.title="Eliminar"; del.onclick=()=>{ if((state.sessions?.[p.id]||[]).length){ alert("No se puede eliminar: tiene acciones."); return; } state.staff=state.staff.filter(x=>x.id!==p.id); touch(); personTabs(); renderClient(); renderStaffList(); };
       chip.appendChild(del); box.appendChild(chip);

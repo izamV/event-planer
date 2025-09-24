@@ -1,5 +1,7 @@
 ﻿(function(){
   "use strict";
+  const ACTION_TYPE_TRANSPORT = window.ACTION_TYPE_TRANSPORT || "TRANSPORTE";
+  const ACTION_TYPE_NORMAL = window.ACTION_TYPE_NORMAL || "NORMAL";
   function emitChanged(){ document.dispatchEvent(new Event("catalogs-changed")); touch(); }
 
   function lockMark(tr, locked){ if(!locked) return; tr.setAttribute("data-locked","true"); tr.querySelectorAll("button,input,select").forEach(n=>{ if(n.tagName==="BUTTON" && /eliminar/i.test(n.textContent||"")) n.disabled=true; else if(n.tagName!=="BUTTON") n.disabled=true; }); }
@@ -46,13 +48,25 @@
     const add=el("div","row");
     const name=el("input","input"); name.placeholder="Nombre";
     const color=el("input","input"); color.type="color"; color.value="#60a5fa";
+    const typeSel=el("select","input");
+    [
+      {label:"Normal", value:ACTION_TYPE_NORMAL},
+      {label:"Transporte", value:ACTION_TYPE_TRANSPORT}
+    ].forEach(opt=>{ const o=el("option",null,opt.label); o.value=opt.value; typeSel.appendChild(o); });
     const b=el("button","btn","Añadir");
     b.onclick=()=>{
       const n=name.value.trim(); if(!n) return;
-      state.taskTypes.push({id:"T_"+(state.taskTypes.length+1), nombre:n, color:color.value||"#60a5fa", locked:false});
+      state.taskTypes.push({
+        id:"T_"+(state.taskTypes.length+1),
+        nombre:n,
+        color:color.value||"#60a5fa",
+        locked:false,
+        tipo:typeSel.value||ACTION_TYPE_NORMAL,
+        quien:"CLIENTE"
+      });
       name.value=""; emitChanged(); openCatTask(cont);
     };
-    add.appendChild(name); add.appendChild(color); add.appendChild(b); cont.appendChild(add);
+    add.appendChild(name); add.appendChild(color); add.appendChild(typeSel); add.appendChild(b); cont.appendChild(add);
 
     // Lista
     const tbl=el("table"); const tb=el("tbody"); tbl.appendChild(tb);
@@ -64,8 +78,10 @@
         const tr=el("tr");
         const n=el("input","input"); n.value=t.nombre; n.oninput=()=>{ t.nombre=n.value; touch(); };
         const c=el("input","input"); c.type="color"; c.value=t.color||"#60a5fa"; c.oninput=()=>{ t.color=c.value; touch(); };
+        const tipo=el("span","mini",t.tipo||ACTION_TYPE_NORMAL);
+        const quien=el("span","mini",t.quien||"CLIENTE");
         const del=el("button","btn danger","Eliminar"); del.onclick=()=>{ state.taskTypes.splice(i,1); emitChanged(); openCatTask(cont); };
-        tr.appendChild(n); tr.appendChild(c); tr.appendChild(del); tb.appendChild(tr);
+        tr.appendChild(n); tr.appendChild(c); tr.appendChild(tipo); tr.appendChild(quien); tr.appendChild(del); tb.appendChild(tr);
         lockMark(tr, !!t.locked);
       });
     cont.appendChild(tbl);
