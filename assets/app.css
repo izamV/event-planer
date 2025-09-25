@@ -503,4 +503,44 @@ textarea.notes{min-height:110px;}
   }
   .materials-add{grid-template-columns:minmax(0,1fr);}
 }
+/* === Vista de horarios renovada === */
+.schedule-view{display:flex;flex-direction:column;gap:1.4rem}
+.schedule-header{display:flex;flex-direction:column;gap:.8rem}
+.schedule-title-row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+.schedule-header h3{margin:0;font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8}
+.schedule-context{background:#0f172a;border:1px solid #1f2937;border-radius:.6rem;padding:.25rem .55rem;font-size:.8rem;color:#cbd5f5;letter-spacing:.05em;text-transform:uppercase}
+.schedule-add{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.schedule-add .input{flex:1 1 260px;min-width:200px}
+.toggle-switch{display:inline-flex;align-items:center;gap:.45rem;background:#0f172a;border:1px solid #1f2937;border-radius:.65rem;padding:.25rem .6rem;cursor:pointer}
+.toggle-switch input{appearance:none;-webkit-appearance:none;width:36px;height:18px;border-radius:999px;background:#1f2937;position:relative;transition:all .2s;cursor:pointer}
+.toggle-switch input::after{content:"";position:absolute;width:14px;height:14px;border-radius:50%;left:2px;top:2px;background:#e5e7eb;transition:all .2s}
+.toggle-switch input:checked{background:#047857}
+.toggle-switch input:checked::after{left:20px;background:#f8fafc}
+.toggle-text{font-size:.85rem;color:#cbd5f5}
+.toggle-switch.compact{padding:.2rem .5rem}
+.toggle-switch.compact .toggle-text{font-size:.8rem}
+.schedule-list{display:flex;flex-direction:column;gap:1rem}
+.schedule-card{background:#0f172a;border:1px solid #1f2937;border-radius:.95rem;padding:1rem 1.1rem;display:flex;flex-direction:column;gap:1rem}
+.schedule-card.selected{border-color:#3b82f6;box-shadow:0 0 0 1px #3b82f6}
+.schedule-card-header{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start}
+.schedule-name{flex:1 1 260px}
+.schedule-meta{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+.schedule-relation{background:#1d4ed8;color:#e0e7ff;padding:.25rem .55rem;border-radius:.65rem;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em}
+.schedule-body{display:grid;grid-template-columns:minmax(280px,1fr) minmax(240px,280px);gap:1.1rem}
+.schedule-fields{display:flex;flex-direction:column;gap:.75rem}
+.schedule-field{display:flex;flex-direction:column;gap:.3rem}
+.schedule-field.inline{flex-direction:row;align-items:center;gap:.6rem;flex-wrap:wrap}
+.schedule-field label{font-size:.85rem;font-weight:600;color:#cbd5f5}
+.schedule-section{display:flex;flex-direction:column;gap:.45rem;background:#111827;border:1px solid #1f2937;border-radius:.8rem;padding:.85rem}
+.schedule-section h4{margin:0;font-size:.85rem;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8}
+.schedule-aside{display:flex;flex-direction:column;gap:1rem}
+.schedule-aside .materials-section,.schedule-aside .staff-section{border:none;padding:0;background:none}
+.schedule-aside .materials-section{gap:.6rem}
+.schedule-actions{display:flex;gap:.6rem;flex-wrap:wrap}
+.schedule-actions .btn{flex:1 1 150px}
+@media (max-width:1100px){
+  .schedule-body{grid-template-columns:1fr}
+  .schedule-actions .btn{flex:1 1 100%}
+}
+
 /* === Fin EP PATCH 2025 === */
