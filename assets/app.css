@@ -110,17 +110,58 @@ table.matlist td.qty{width:90px}
 table.matlist td.act{width:120px}
 
 /* === Nuevo layout horario cliente === */
-.client-layout{display:grid;grid-template-columns:minmax(260px,320px) 1fr;gap:1.4rem}
+.client-screen{display:flex;flex-direction:column;gap:1.5rem}
+.client-timeline{display:flex;flex-direction:column;gap:.75rem;background:#0f172a;border:1px solid #1f2937;border-radius:.9rem;padding:1rem 1.2rem}
+.timeline-head{display:flex;justify-content:space-between;align-items:center;gap:.75rem}
+.timeline-head h3{margin:0;font-size:1rem;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8}
+.timeline-track{display:flex;flex-wrap:wrap;gap:.6rem}
+.timeline-card{display:flex;flex-direction:column;gap:.2rem;align-items:flex-start;background:#0b1220;border:1px solid #1f2937;border-radius:.7rem;padding:.6rem .75rem;color:#e5e7eb;min-width:160px;cursor:pointer}
+.timeline-card .time{font-variant-numeric:tabular-nums;font-weight:600}
+.timeline-card .title{font-size:1rem;font-weight:600}
+.timeline-card .mini{color:#94a3b8}
+.timeline-card:hover{border-color:#3b82f6}
+.timeline-card.active{border-color:#3b82f6;box-shadow:0 0 0 1px #3b82f6}
+.timeline-empty{color:#94a3b8;font-size:.9rem}
+.client-layout{display:grid;grid-template-columns:minmax(280px,340px) 1fr;gap:1.4rem}
 .task-catalog{display:flex;flex-direction:column;gap:1rem}
 .catalog-toolbar{display:flex}
 .catalog-section{background:#0f172a;border:1px solid #1f2937;border-radius:.75rem;padding:.8rem;display:flex;flex-direction:column;gap:.55rem}
 .catalog-title{font-size:.9rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#94a3b8}
-.catalog-item{display:flex;flex-direction:column;gap:.2rem;align-items:flex-start;background:#0b1220;border:1px solid #1f2937;border-radius:.65rem;padding:.6rem .75rem;color:#e5e7eb;text-align:left;cursor:pointer}
+.catalog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.6rem}
+.catalog-item{display:flex;flex-direction:column;gap:.35rem;align-items:flex-start;background:#0b1220;border:1px solid #1f2937;border-radius:.75rem;padding:.7rem .8rem;color:#e5e7eb;text-align:left;cursor:pointer}
 .catalog-item .mini{margin-top:.1rem}
 .catalog-item.active{border-color:#3b82f6;box-shadow:0 0 0 1px #3b82f6}
-.catalog-item:hover{border-color:#3b82f6;}
-.relation-tag{margin-top:.25rem;font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;color:#cbd5f5}
-.task-card{display:flex;flex-direction:column;gap:1rem;background:#0b1220;border:1px solid #1f2937;border-radius:.9rem;padding:1rem 1.2rem}
+.catalog-item:hover{border-color:#3b82f6}
+.catalog-name{font-size:1rem;font-weight:600}
+.catalog-meta{display:flex;gap:.45rem;font-size:.8rem;color:#94a3b8}
+.catalog-time{font-variant-numeric:tabular-nums}
+.catalog-duration{font-style:italic}
+.relation-tag{margin-top:.1rem;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#cbd5f5}
+.task-card{display:flex;flex-direction:column;gap:1.2rem;background:#0b1220;border:1px solid #1f2937;border-radius:.9rem;padding:1.2rem}
+.task-editor{display:flex;flex-direction:column;gap:1.2rem}
+.nexo-grid{display:grid;grid-template-areas:"top top top" "left center right" "bottom bottom bottom";grid-template-columns:minmax(220px,260px) minmax(320px,1fr) minmax(240px,280px);gap:1rem}
+.nexo-area{background:#0f172a;border:1px solid #1f2937;border-radius:.9rem;padding:.8rem;display:flex;flex-direction:column;gap:.6rem}
+.nexo-top{grid-area:top}
+.nexo-left{grid-area:left}
+.nexo-center{grid-area:center;gap:1rem}
+.nexo-right{grid-area:right}
+.nexo-bottom{grid-area:bottom}
+.nexo-area[data-relation=pre]{box-shadow:inset 0 0 0 1px rgba(168,85,247,.4)}
+.nexo-area[data-relation=parallel]{box-shadow:inset 0 0 0 1px rgba(20,184,166,.4)}
+.nexo-area[data-relation=post]{box-shadow:inset 0 0 0 1px rgba(249,115,22,.35)}
+.nexo-area[data-relation=materials]{box-shadow:inset 0 0 0 1px rgba(59,130,246,.25)}
+.nexo-head{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+.nexo-head h4{margin:0;font-size:.85rem;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8}
+.nexo-list{display:flex;flex-wrap:wrap;gap:.45rem}
+.nexo-item{display:flex;flex-direction:column;gap:.2rem;align-items:flex-start;background:#111827;border:1px solid #1f2937;border-radius:.65rem;padding:.45rem .6rem;cursor:pointer;max-width:100%}
+.nexo-item .mini{color:#94a3b8;font-size:.8rem}
+.nexo-item.pending{border-color:#f97316;color:#fdba74}
+.nexo-item.active{border-color:#3b82f6;color:#bfdbfe}
+.nexo-empty{color:#94a3b8;font-size:.85rem}
+.nexo-name{font-weight:600}
+.materials-section,.staff-section{border-top:1px solid #1f2937;padding-top:.75rem;display:flex;flex-direction:column;gap:.6rem}
+.nexo-right .materials-section{border-top:none;padding-top:0}
+.nexo-right .materials-list{max-height:260px;overflow:auto}
 .task-header{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;flex-wrap:wrap}
 .task-title{margin:0;font-size:1.4rem}
 .task-chips{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
@@ -136,22 +177,20 @@ table.matlist td.act{width:120px}
 .field-row{display:flex;flex-direction:column;gap:.35rem}
 .field-row label{font-weight:600;font-size:.85rem;color:#cbd5f5}
 .field-row .input, .field-row select, .field-row textarea{width:100%}
-.materials-section,.staff-section,.child-block{border-top:1px solid #1f2937;padding-top:.75rem;display:flex;flex-direction:column;gap:.6rem}
 .materials-list{display:flex;flex-direction:column;gap:.45rem}
 .material-row{display:flex;gap:.45rem;align-items:center}
 .staff-picker{display:flex;flex-wrap:wrap;gap:.45rem}
 .staff-toggle{background:#111827;border:1px solid #1f2937;color:#e5e7eb;border-radius:.6rem;padding:.35rem .65rem;cursor:pointer}
 .staff-toggle.active{background:#047857;border-color:#059669;color:#fff}
-.child-header{display:flex;justify-content:space-between;align-items:center}
-.child-list{display:flex;flex-wrap:wrap;gap:.45rem}
-.child-item{background:#0f172a;border:1px solid #1f2937;color:#e5e7eb;border-radius:.6rem;padding:.35rem .6rem;cursor:pointer}
-.child-item.pending{border-color:#f97316;color:#fdba74}
 .empty-card{padding:2rem;border:1px dashed #1f2937;border-radius:.75rem;text-align:center;color:#94a3b8}
-.materials-section .mini,.staff-section .mini,.child-block .mini{color:#94a3b8}
+.materials-section .mini,.staff-section .mini{color:#94a3b8}
 .check{display:flex;align-items:center;gap:.35rem;font-size:.85rem;color:#cbd5f5}
+.task-actions{margin-top:auto}
+.task-actions .btn{width:100%}
 
 @media (max-width:1100px){
   .client-layout{grid-template-columns:1fr}
+  .nexo-grid{grid-template-areas:"top" "center" "right" "left" "bottom";grid-template-columns:1fr}
 }
 
 /* === EP PATCH 2025: Layout filas horario renovado === */
