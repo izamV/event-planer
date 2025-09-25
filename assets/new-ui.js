@@ -228,40 +228,84 @@
     });
   };
 
+  const renderTimeline = (container, selectedId)=>{
+    container.innerHTML="";
+    const header=el("div","timeline-head");
+    header.appendChild(el("h3",null,"Horario fijo del cliente"));
+    const addBtn=el("button","btn small","+ Hito");
+    addBtn.onclick=()=>{ createTask({ relation:"milestone" }); renderClient(); };
+    header.appendChild(addBtn);
+    container.appendChild(header);
+
+    const list=el("div","timeline-track");
+    const milestones=getRootTasks().slice().sort((a,b)=>{
+      const sa=a.startMin??Infinity; const sb=b.startMin??Infinity;
+      if(sa!==sb) return sa-sb;
+      return labelForTask(a).localeCompare(labelForTask(b));
+    });
+    if(!milestones.length){
+      list.appendChild(el("div","timeline-empty","No hay acciones fijas configuradas."));
+    }else{
+      milestones.forEach(task=>{
+        const card=el("button","timeline-card");
+        if(task.id===selectedId) card.classList.add("active");
+        const time=task.startMin!=null ? toHHMM(task.startMin) : "Sin hora";
+        card.appendChild(el("div","time",time));
+        card.appendChild(el("div","title",labelForTask(task)));
+        const locName=(state.locations||[]).find(l=>l.id===task.locationId)?.nombre || "";
+        if(locName) card.appendChild(el("div","mini",locName));
+        card.onclick=()=>{ selectTask(task.id); renderClient(); };
+        list.appendChild(card);
+      });
+    }
+    container.appendChild(list);
+  };
+
   const renderCatalog = (container, tasks, selectedId)=>{
     container.innerHTML="";
     const toolbar=el("div","catalog-toolbar");
-    const addBtn=el("button","btn primary full","+ Nuevo hito");
+    const addBtn=el("button","btn primary full","+ Nuevo hito" );
     addBtn.onclick=()=>{ createTask({relation:"milestone"}); renderClient(); };
     toolbar.appendChild(addBtn);
     container.appendChild(toolbar);
 
-    const grouped=[
-      { key:"pending", title:"Falta info", filter:(t)=>!isTaskComplete(t) },
-      { key:"complete", title:"Completa", filter:(t)=>isTaskComplete(t) }
+    const sections=[
+      { key:"pending", title:"Acciones con datos pendientes", filter:(t)=>!isTaskComplete(t) },
+      { key:"complete", title:"Acciones completas", filter:(t)=>isTaskComplete(t) }
     ];
 
-    grouped.forEach(group=>{
+    sections.forEach(section=>{
       const sec=el("div","catalog-section");
-      const head=el("div","catalog-title",`${group.title}`);
-      sec.appendChild(head);
-      const list=sortedTasks(tasks.filter(group.filter));
+      sec.appendChild(el("div","catalog-title",section.title));
+      const list=sortedTasks(tasks.filter(section.filter));
       if(!list.length){
         sec.appendChild(el("div","mini muted","Sin tareas"));
       }else{
+        const grid=el("div","catalog-grid");
         list.forEach(task=>{
-          const item=el("button","catalog-item",labelForTask(task));
+          const item=el("button","catalog-item","");
           if(task.id===selectedId) item.classList.add("active");
+          item.onclick=()=>{ selectTask(task.id); renderClient(); };
+
+          const title=el("div","catalog-name",labelForTask(task));
+          item.appendChild(title);
           const relationLabel=RELATION_LABEL[task.structureRelation] || "Tarea";
           item.appendChild(el("span","relation-tag",relationLabel));
-          item.onclick=()=>{ selectTask(task.id); renderClient(); };
+          const meta=el("div","catalog-meta");
+          const time=task.startMin!=null ? toHHMM(task.startMin) : "Sin hora";
+          meta.appendChild(el("span","catalog-time",time));
+          const duration=task.durationMin!=null ? `${task.durationMin} min` : "Sin duración";
+          meta.appendChild(el("span","catalog-duration",duration));
+          item.appendChild(meta);
+
           const path=getBreadcrumb(task);
           if(path.length>1){
             const trail=path.slice(0,-1).map(node=>labelForTask(node)).join(" · ");
             item.appendChild(el("div","mini muted",trail));
           }
-          sec.appendChild(item);
+          grid.appendChild(item);
         });
+        sec.appendChild(grid);
       }
       container.appendChild(sec);
     });
@@ -319,28 +363,48 @@
     return wrap;
   };
 
-  const renderChildSection = (task, relation, label)=>{
-    const block=el("div","child-block");
-    const header=el("div","child-header");
-    header.appendChild(el("h4",null,label));
-    const add=el("button","btn small",`+${label}`);
+  const relationInfo = (task)=>{
+    if(task.structureRelation==="post" && task.limitLateMin!=null) return `≤ ${toHHMM(task.limitLateMin)}`;
+    if((task.structureRelation==="pre" || task.structureRelation==="parallel") && task.limitEarlyMin!=null) return `≥ ${toHHMM(task.limitEarlyMin)}`;
+    if(task.startMin!=null) return toHHMM(task.startMin);
+    if(task.durationMin!=null) return `${task.durationMin} min`;
+    return "Sin datos";
+  };
+
+  const renderNexoArea = (task, relation, label, position)=>{
+    const area=el("div",`nexo-area nexo-${position}`);
+    area.dataset.relation=relation;
+    const head=el("div","nexo-head");
+    head.appendChild(el("h4",null,label));
+    const add=el("button","btn small","+ Añadir");
     add.onclick=()=>{ createTask({ parentId:task.id, relation }); renderClient(); };
-    header.appendChild(add);
-    block.appendChild(header);
+    head.appendChild(add);
+    area.appendChild(head);
     const children=getTaskChildren(task.id).filter(ch=>ch.structureRelation===relation);
     if(!children.length){
-      block.appendChild(el("div","mini muted","Sin tareas"));
+      area.appendChild(el("div","nexo-empty","Sin tareas"));
     }else{
-      const list=el("div","child-list");
+      const list=el("div","nexo-list");
       children.forEach(ch=>{
-        const item=el("button","child-item",labelForTask(ch));
+        const item=el("button","nexo-item","");
         if(!isTaskComplete(ch)) item.classList.add("pending");
+        if(state.project.view.selectedTaskId===ch.id) item.classList.add("active");
         item.onclick=()=>{ selectTask(ch.id); renderClient(); };
+        item.appendChild(el("div","nexo-name",labelForTask(ch)));
+        item.appendChild(el("div","mini",relationInfo(ch)));
         list.appendChild(item);
       });
-      block.appendChild(list);
+      area.appendChild(list);
     }
-    return block;
+    return area;
+  };
+
+  const renderMaterialArea = (task)=>{
+    const area=el("div","nexo-area nexo-right");
+    area.dataset.relation="materials";
+    const mat=renderMaterials(task);
+    area.appendChild(mat);
+    return area;
   };
 
   const renderTaskCard = (container, task)=>{
@@ -350,6 +414,12 @@
       return;
     }
     applyTaskDefaults(task);
+
+    const editor=el("div","task-editor");
+    const grid=el("div","nexo-grid");
+
+    const center=el("div","nexo-area nexo-center");
+    center.dataset.relation=task.structureRelation||"task";
 
     const header=el("div","task-header");
     const title=el("h2","task-title", labelForTask(task));
@@ -361,7 +431,7 @@
     statusChip.classList.add(isTaskComplete(task)?"ok":"warn");
     chips.appendChild(statusChip);
     header.appendChild(chips);
-    container.appendChild(header);
+    center.appendChild(header);
 
     const breadcrumb=el("div","task-breadcrumb");
     const path=getBreadcrumb(task);
@@ -372,7 +442,7 @@
       breadcrumb.appendChild(btn);
       if(idx<path.length-1) breadcrumb.appendChild(el("span","crumb-sep","›"));
     });
-    container.appendChild(breadcrumb);
+    center.appendChild(breadcrumb);
 
     const form=el("div","task-form");
     const nameRow=el("div","field-row");
@@ -474,12 +544,8 @@
     notesRow.appendChild(notes);
     form.appendChild(notesRow);
 
-    container.appendChild(form);
-    container.appendChild(renderMaterials(task));
-    container.appendChild(renderStaffPicker(task));
-    container.appendChild(renderChildSection(task,"pre","Pre"));
-    container.appendChild(renderChildSection(task,"parallel","Paralela"));
-    container.appendChild(renderChildSection(task,"post","Post"));
+    center.appendChild(form);
+    center.appendChild(renderStaffPicker(task));
 
     const danger=el("button","btn danger", "Eliminar tarea");
     danger.onclick=()=>{
@@ -495,7 +561,18 @@
         renderClient();
       }
     };
-    container.appendChild(danger);
+    const actions=el("div","task-actions");
+    actions.appendChild(danger);
+    center.appendChild(actions);
+
+    grid.appendChild(renderNexoArea(task,"pre","Pretareas","top"));
+    grid.appendChild(renderNexoArea(task,"parallel","Concurrencia","left"));
+    grid.appendChild(center);
+    grid.appendChild(renderMaterialArea(task));
+    grid.appendChild(renderNexoArea(task,"post","Posttareas","bottom"));
+
+    editor.appendChild(grid);
+    container.appendChild(editor);
   };
 
   const getVisibleTasks = ()=>{
@@ -526,12 +603,18 @@
     }
     const selectedTask = selectedId ? getTaskById(selectedId) : null;
     root.innerHTML="";
+    const screen=el("div","client-screen");
+    const timeline=el("div","client-timeline");
+    renderTimeline(timeline, selectedId);
+    screen.appendChild(timeline);
+
     const layout=el("div","client-layout");
     const catalog=el("div","task-catalog");
     const card=el("div","task-card");
     layout.appendChild(catalog);
     layout.appendChild(card);
-    root.appendChild(layout);
+    screen.appendChild(layout);
+    root.appendChild(screen);
 
     renderCatalog(catalog, visible.length?visible:tasks, selectedId);
     renderTaskCard(card, selectedTask);
