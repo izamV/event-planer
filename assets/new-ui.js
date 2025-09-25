@@ -17,6 +17,7 @@
   };
 
   let seq = 0;
+  let refreshActiveView = ()=>{};
   const nextId = ()=>`T_${Date.now().toString(36)}${(++seq).toString(36)}`;
 
   const originalEnsureDefaults = window.ensureDefaults || (()=>{});
@@ -233,7 +234,7 @@
     const header=el("div","timeline-head");
     header.appendChild(el("h3",null,"Horario fijo del cliente"));
     const addBtn=el("button","btn small","+ Hito");
-    addBtn.onclick=()=>{ createTask({ relation:"milestone" }); renderClient(); };
+    addBtn.onclick=()=>{ createTask({ relation:"milestone" }); refreshActiveView(); };
     header.appendChild(addBtn);
     container.appendChild(header);
 
@@ -254,7 +255,7 @@
         card.appendChild(el("div","title",labelForTask(task)));
         const locName=(state.locations||[]).find(l=>l.id===task.locationId)?.nombre || "";
         if(locName) card.appendChild(el("div","mini",locName));
-        card.onclick=()=>{ selectTask(task.id); renderClient(); };
+        card.onclick=()=>{ selectTask(task.id); refreshActiveView(); };
         list.appendChild(card);
       });
     }
@@ -265,7 +266,7 @@
     container.innerHTML="";
     const toolbar=el("div","catalog-toolbar");
     const addBtn=el("button","btn primary full","+ Nuevo hito" );
-    addBtn.onclick=()=>{ createTask({relation:"milestone"}); renderClient(); };
+    addBtn.onclick=()=>{ createTask({relation:"milestone"}); refreshActiveView(); };
     toolbar.appendChild(addBtn);
     container.appendChild(toolbar);
 
@@ -285,7 +286,7 @@
         list.forEach(task=>{
           const item=el("button","catalog-item","");
           if(task.id===selectedId) item.classList.add("active");
-          item.onclick=()=>{ selectTask(task.id); renderClient(); };
+          item.onclick=()=>{ selectTask(task.id); refreshActiveView(); };
 
           const title=el("div","catalog-name",labelForTask(task));
           item.appendChild(title);
@@ -325,16 +326,16 @@
       (state.materialTypes||[]).forEach(mt=>{
         const opt=el("option",null,mt.nombre||"Material"); opt.value=mt.id; if(mt.id===mat.materialTypeId) opt.selected=true; sel.appendChild(opt);
       });
-      sel.onchange=()=>{ task.materiales[idx].materialTypeId = sel.value||null; touchTask(task); renderClient(); };
+      sel.onchange=()=>{ task.materiales[idx].materialTypeId = sel.value||null; touchTask(task); refreshActiveView(); };
       const qty=el("input","input"); qty.type="number"; qty.min="0"; qty.step="1"; qty.value=String(mat.cantidad||0);
       qty.onchange=()=>{ task.materiales[idx].cantidad = Number(qty.value)||0; touchTask(task); };
       const del=el("button","btn small", "Quitar");
-      del.onclick=()=>{ task.materiales.splice(idx,1); touchTask(task); renderClient(); };
+      del.onclick=()=>{ task.materiales.splice(idx,1); touchTask(task); refreshActiveView(); };
       row.appendChild(sel); row.appendChild(qty); row.appendChild(del);
       table.appendChild(row);
     });
     const add=el("button","btn small", "Añadir material");
-    add.onclick=()=>{ task.materiales.push({materialTypeId:null,cantidad:0}); touchTask(task); renderClient(); };
+    add.onclick=()=>{ task.materiales.push({materialTypeId:null,cantidad:0}); touchTask(task); refreshActiveView(); };
     wrap.appendChild(table);
     wrap.appendChild(add);
     return wrap;
@@ -355,7 +356,7 @@
         if(current.has(st.id)) current.delete(st.id); else current.add(st.id);
         task.assignedStaffIds=Array.from(current);
         touchTask(task);
-        renderClient();
+        refreshActiveView();
       };
       list.appendChild(btn);
     });
@@ -377,7 +378,7 @@
     const head=el("div","nexo-head");
     head.appendChild(el("h4",null,label));
     const add=el("button","btn small","+ Añadir");
-    add.onclick=()=>{ createTask({ parentId:task.id, relation }); renderClient(); };
+    add.onclick=()=>{ createTask({ parentId:task.id, relation }); refreshActiveView(); };
     head.appendChild(add);
     area.appendChild(head);
     const children=getTaskChildren(task.id).filter(ch=>ch.structureRelation===relation);
@@ -389,7 +390,7 @@
         const item=el("button","nexo-item","");
         if(!isTaskComplete(ch)) item.classList.add("pending");
         if(state.project.view.selectedTaskId===ch.id) item.classList.add("active");
-        item.onclick=()=>{ selectTask(ch.id); renderClient(); };
+        item.onclick=()=>{ selectTask(ch.id); refreshActiveView(); };
         item.appendChild(el("div","nexo-name",labelForTask(ch)));
         item.appendChild(el("div","mini",relationInfo(ch)));
         list.appendChild(item);
@@ -438,7 +439,7 @@
     path.forEach((node,idx)=>{
       const btn=el("button","crumb", labelForTask(node));
       if(idx===path.length-1){ btn.disabled=true; }
-      btn.onclick=()=>{ selectTask(node.id); renderClient(); };
+      btn.onclick=()=>{ selectTask(node.id); refreshActiveView(); };
       breadcrumb.appendChild(btn);
       if(idx<path.length-1) breadcrumb.appendChild(el("span","crumb-sep","›"));
     });
@@ -449,7 +450,7 @@
     nameRow.appendChild(el("label",null,"Nombre"));
     const nameInput=el("input","input"); nameInput.type="text"; nameInput.value=task.actionName||"";
     nameInput.oninput=()=>{ task.actionName=nameInput.value; title.textContent=labelForTask(task); };
-    nameInput.onblur=()=>{ touchTask(task); renderClient(); };
+    nameInput.onblur=()=>{ touchTask(task); refreshActiveView(); };
     nameRow.appendChild(nameInput);
     form.appendChild(nameRow);
 
@@ -461,7 +462,7 @@
       task.durationMin=v;
       if(task.startMin!=null){ task.endMin = task.startMin + v; }
       touchTask(task);
-      renderClient();
+      refreshActiveView();
     };
     durationRow.appendChild(durInput);
     form.appendChild(durationRow);
@@ -476,7 +477,7 @@
         if(v==null){ task.endMin=null; }
         else task.endMin=v + Math.max(5, Number(task.durationMin)||60);
         touchTask(task);
-        renderClient();
+        refreshActiveView();
       };
       timeRow.appendChild(timeInput);
       form.appendChild(timeRow);
@@ -488,7 +489,7 @@
         limitInput.onchange=()=>{
           task.limitLateMin=parseTimeInput(limitInput.value);
           touchTask(task);
-          renderClient();
+          refreshActiveView();
         };
         limitRow.appendChild(limitInput);
       }else{
@@ -497,7 +498,7 @@
         limitInput.onchange=()=>{
           task.limitEarlyMin=parseTimeInput(limitInput.value);
           touchTask(task);
-          renderClient();
+          refreshActiveView();
         };
         limitRow.appendChild(limitInput);
       }
@@ -512,7 +513,7 @@
         if(v==null){ task.endMin=null; }
         else task.endMin=v + Math.max(5, Number(task.durationMin)||60);
         touchTask(task);
-        renderClient();
+        refreshActiveView();
       };
       startRow.appendChild(startInput);
       form.appendChild(startRow);
@@ -526,11 +527,11 @@
       const opt=el("option",null,loc.nombre||"Localización"); opt.value=loc.id; if(loc.id===task.locationId) opt.selected=true; locSelect.appendChild(opt);
     });
     locSelect.disabled = task.locationApplies!==true;
-    locSelect.onchange=()=>{ task.locationId = locSelect.value||null; touchTask(task); renderClient(); };
+    locSelect.onchange=()=>{ task.locationId = locSelect.value||null; touchTask(task); refreshActiveView(); };
     locRow.appendChild(locSelect);
     const locToggle=el("label","check");
     const chk=el("input"); chk.type="checkbox"; chk.checked=!task.locationApplies;
-    chk.onchange=()=>{ task.locationApplies = !chk.checked; if(!task.locationApplies) task.locationId=null; touchTask(task); renderClient(); };
+    chk.onchange=()=>{ task.locationApplies = !chk.checked; if(!task.locationApplies) task.locationId=null; touchTask(task); refreshActiveView(); };
     locToggle.appendChild(chk);
     locToggle.appendChild(el("span",null,"Sin localización"));
     locRow.appendChild(locToggle);
@@ -558,7 +559,7 @@
           const next=getTaskList()[0];
           selectTask(next?next.id:null);
         }
-        renderClient();
+        refreshActiveView();
       }
     };
     const actions=el("div","task-actions");
@@ -584,10 +585,10 @@
     return tasks;
   };
 
-  window.renderClient = ()=>{
+  const renderTaskCatalogView = (root)=>{
     ensureViewDefaults();
-    const root=document.getElementById("clienteView");
     if(!root) return;
+    refreshActiveView = ()=>renderTaskCatalogView(root);
     const tasks=getTaskList();
     const visible=getVisibleTasks();
     let selectedId=state.project.view.selectedTaskId;
@@ -618,6 +619,284 @@
 
     renderCatalog(catalog, visible.length?visible:tasks, selectedId);
     renderTaskCard(card, selectedTask);
+  };
+
+  window.renderTaskCatalogView = renderTaskCatalogView;
+
+  const buildTypeSwitch = (task)=>{
+    const wrap=el("label","toggle-switch");
+    const input=el("input");
+    input.type="checkbox";
+    const transportValue = window.ACTION_TYPE_TRANSPORT || "TRANSPORTE";
+    const normalValue = window.ACTION_TYPE_NORMAL || "NORMAL";
+    const isTransport = ()=> task.actionType === transportValue;
+    input.checked = isTransport();
+    const label=el("span","toggle-text", isTransport()?"Transporte":"Normal");
+    input.onchange=()=>{
+      const transport=input.checked;
+      task.actionType = transport ? transportValue : normalValue;
+      if(transport){
+        if(task.locationApplies===false) task.locationApplies=true;
+      }else{
+        task.locationApplies=false;
+        task.locationId=null;
+      }
+      touchTask(task);
+      refreshActiveView();
+    };
+    wrap.appendChild(input);
+    wrap.appendChild(label);
+    return wrap;
+  };
+
+  const scheduleField = (labelText, inputNode)=>{
+    const row=el("div","schedule-field");
+    const lab=el("label",null,labelText);
+    row.appendChild(lab);
+    row.appendChild(inputNode);
+    return row;
+  };
+
+  const renderScheduleCard = (task)=>{
+    applyTaskDefaults(task);
+    const card=el("div","schedule-card");
+    if(state.project.view.selectedTaskId===task.id) card.classList.add("selected");
+
+    const header=el("div","schedule-card-header");
+    const nameInput=el("input","input schedule-name");
+    nameInput.type="text";
+    nameInput.placeholder="Nombre de la tarea";
+    nameInput.value=task.actionName||"";
+    nameInput.oninput=()=>{ task.actionName=nameInput.value; };
+    nameInput.onblur=()=>{ touchTask(task); refreshActiveView(); };
+    header.appendChild(nameInput);
+
+    const meta=el("div","schedule-meta");
+    meta.appendChild(el("span","schedule-relation", RELATION_LABEL[task.structureRelation] || "Tarea"));
+    meta.appendChild(buildTypeSwitch(task));
+    header.appendChild(meta);
+    card.appendChild(header);
+
+    const body=el("div","schedule-body");
+    const fields=el("div","schedule-fields");
+
+    const durInput=el("input","input");
+    durInput.type="number";
+    durInput.min="5";
+    durInput.step="5";
+    durInput.value=String(task.durationMin||60);
+    durInput.onchange=()=>{
+      const v=Math.max(5, Math.round(Number(durInput.value)||60));
+      task.durationMin=v;
+      if(task.startMin!=null){ task.endMin = task.startMin + v; }
+      touchTask(task);
+      refreshActiveView();
+    };
+
+    if(task.structureRelation==="milestone"){
+      const startInput=el("input","input");
+      startInput.type="time";
+      startInput.value=formatTimeValue(task.startMin);
+      startInput.onchange=()=>{
+        const v=parseTimeInput(startInput.value);
+        task.startMin=v;
+        if(v==null){ task.endMin=null; }
+        else task.endMin=v + Math.max(5, Number(task.durationMin)||60);
+        touchTask(task);
+        refreshActiveView();
+      };
+      fields.appendChild(scheduleField("Hora", startInput));
+    }else{
+      if(task.structureRelation==="post"){
+        const limitInput=el("input","input");
+        limitInput.type="time";
+        limitInput.value=formatTimeValue(task.limitLateMin);
+        limitInput.onchange=()=>{
+          task.limitLateMin=parseTimeInput(limitInput.value);
+          touchTask(task);
+          refreshActiveView();
+        };
+        fields.appendChild(scheduleField("Límite tarde", limitInput));
+      }else{
+        const limitInput=el("input","input");
+        limitInput.type="time";
+        limitInput.value=formatTimeValue(task.limitEarlyMin);
+        limitInput.onchange=()=>{
+          task.limitEarlyMin=parseTimeInput(limitInput.value);
+          touchTask(task);
+          refreshActiveView();
+        };
+        fields.appendChild(scheduleField("Límite temprano", limitInput));
+      }
+
+      const startInput=el("input","input");
+      startInput.type="time";
+      startInput.value=formatTimeValue(task.startMin);
+      startInput.onchange=()=>{
+        const v=parseTimeInput(startInput.value);
+        task.startMin=v;
+        if(v==null){ task.endMin=null; }
+        else task.endMin=v + Math.max(5, Number(task.durationMin)||60);
+        touchTask(task);
+        refreshActiveView();
+      };
+      fields.appendChild(scheduleField("Hora exacta (opcional)", startInput));
+    }
+
+    fields.appendChild(scheduleField("Duración (min)", durInput));
+
+    const locSection=el("div","schedule-section");
+    locSection.appendChild(el("h4",null,"Destino"));
+    const locRow=el("div","schedule-field inline");
+    const locSelect=el("select","input");
+    const optEmpty=el("option",null,"- seleccionar -"); optEmpty.value=""; locSelect.appendChild(optEmpty);
+    (state.locations||[]).forEach(loc=>{
+      const opt=el("option",null,loc.nombre||"Localización"); opt.value=loc.id; if(loc.id===task.locationId) opt.selected=true; locSelect.appendChild(opt);
+    });
+    const isTransport = task.actionType === (window.ACTION_TYPE_TRANSPORT || "TRANSPORTE");
+    if(!isTransport){
+      locSelect.disabled=true;
+    }else{
+      locSelect.disabled = task.locationApplies!==true;
+    }
+    locSelect.onchange=()=>{ task.locationId = locSelect.value||null; touchTask(task); refreshActiveView(); };
+    locRow.appendChild(locSelect);
+    const locToggle=el("label","check");
+    const chk=el("input"); chk.type="checkbox"; chk.checked=!task.locationApplies;
+    chk.disabled = !isTransport;
+    chk.onchange=()=>{ task.locationApplies = !chk.checked; if(!task.locationApplies) task.locationId=null; touchTask(task); refreshActiveView(); };
+    locToggle.appendChild(chk);
+    locToggle.appendChild(el("span",null,"Sin destino"));
+    locRow.appendChild(locToggle);
+    locSection.appendChild(locRow);
+    if(!isTransport){
+      locSection.appendChild(el("div","mini muted","Disponible solo para tareas de transporte."));
+    }
+
+    const notesInput=el("textarea","input");
+    notesInput.rows=4;
+    notesInput.value=task.comentario||"";
+    notesInput.oninput=()=>{ task.comentario=notesInput.value; };
+    notesInput.onblur=()=>{ touchTask(task); refreshActiveView(); };
+
+    fields.appendChild(locSection);
+    fields.appendChild(scheduleField("Notas", notesInput));
+
+    body.appendChild(fields);
+
+    const aside=el("div","schedule-aside");
+    aside.appendChild(renderMaterials(task));
+    aside.appendChild(renderStaffPicker(task));
+    body.appendChild(aside);
+    card.appendChild(body);
+
+    const actions=el("div","schedule-actions");
+    const openBtn=el("button","btn","Abrir en catálogo");
+    openBtn.onclick=()=>{
+      selectTask(task.id);
+      const catalogHost=document.getElementById("catalogView");
+      if(catalogHost){
+        showOnly("catalogView");
+        if(typeof window.openCatTask==="function") window.openCatTask(catalogHost);
+      }
+    };
+    const deleteBtn=el("button","btn danger","Eliminar tarea");
+    deleteBtn.onclick=()=>{
+      if(confirm("¿Eliminar esta tarea y sus dependientes?")){
+        const parentId=task.structureParentId;
+        deleteTask(task.id);
+        if(parentId){ selectTask(parentId); }
+        refreshActiveView();
+      }
+    };
+    actions.appendChild(openBtn);
+    actions.appendChild(deleteBtn);
+    card.appendChild(actions);
+
+    card.addEventListener("click",(ev)=>{
+      if(ev.target.closest("input,select,textarea,button,label")) return;
+      selectTask(task.id);
+      refreshActiveView();
+    });
+
+    return card;
+  };
+
+  const renderScheduleView = (root)=>{
+    ensureViewDefaults();
+    if(!root) return;
+    refreshActiveView = ()=>renderScheduleView(root);
+    const tasks=getTaskList();
+    const visible=getVisibleTasks();
+    let selectedId=state.project.view.selectedTaskId;
+    if(selectedId && !tasks.find(t=>t.id===selectedId)) selectedId=null;
+    if(!selectedId){
+      const fallback=(visible[0]||tasks[0])?.id || null;
+      selectedId=fallback;
+      state.project.view.selectedTaskId=selectedId;
+    }
+    if(selectedId && visible.length && !visible.some(t=>t.id===selectedId)){
+      selectedId=visible[0].id;
+      state.project.view.selectedTaskId=selectedId;
+    }
+
+    const display = sortedTasks(visible.length?visible:tasks);
+    root.innerHTML="";
+
+    const view=el("div","schedule-view");
+    const header=el("div","schedule-header");
+    const titleRow=el("div","schedule-title-row");
+    titleRow.appendChild(el("h3",null,"Horarios"));
+    const activeTabId=state.project.view.lastTab;
+    const personName = (!activeTabId || activeTabId==="CLIENTE")
+      ? "Cliente"
+      : ((state.staff||[]).find(st=>st.id===activeTabId)?.nombre || activeTabId);
+    titleRow.appendChild(el("span","schedule-context", personName));
+    header.appendChild(titleRow);
+    const form=el("div","schedule-add");
+    const nameInput=el("input","input");
+    nameInput.placeholder="Nombre de la tarea";
+    const typeSwitchWrap=el("label","toggle-switch compact");
+    const addSwitch=el("input"); addSwitch.type="checkbox";
+    const addLabel=el("span","toggle-text","Normal");
+    addSwitch.onchange=()=>{ addLabel.textContent=addSwitch.checked?"Transporte":"Normal"; };
+    typeSwitchWrap.appendChild(addSwitch);
+    typeSwitchWrap.appendChild(addLabel);
+    const addBtn=el("button","btn primary","Crear");
+    addBtn.onclick=()=>{
+      const nombre=(nameInput.value||"").trim();
+      if(!nombre) return;
+      const task=createTask({ relation:"milestone" });
+      task.actionName=nombre;
+      task.actionType=addSwitch.checked ? (window.ACTION_TYPE_TRANSPORT || "TRANSPORTE") : (window.ACTION_TYPE_NORMAL || "NORMAL");
+      task.locationApplies = addSwitch.checked;
+      const activeTab=state.project.view.lastTab;
+      if(activeTab && activeTab!=="CLIENTE"){ task.assignedStaffIds=[activeTab]; }
+      touchTask(task);
+      selectTask(task.id);
+      nameInput.value="";
+      refreshActiveView();
+    };
+    form.appendChild(nameInput);
+    form.appendChild(typeSwitchWrap);
+    form.appendChild(addBtn);
+    header.appendChild(form);
+    view.appendChild(header);
+
+    const list=el("div","schedule-list");
+    if(!display.length){
+      list.appendChild(el("div","mini muted","No hay tareas todavía."));
+    }else{
+      display.forEach(task=>{ list.appendChild(renderScheduleCard(task)); });
+    }
+    view.appendChild(list);
+    root.appendChild(view);
+  };
+
+  window.renderClient = ()=>{
+    const root=document.getElementById("clienteView");
+    if(!root) return;
+    renderScheduleView(root);
   };
 
   const collectPersons = ()=>{
@@ -796,8 +1075,8 @@ const a=document.createElement("a");
     const tabs=document.getElementById("personTabs");
     if(tabs){
       tabs.innerHTML="";
-      const btn=el("button","tab active","Horario del cliente");
-      btn.onclick=()=>{ state.project.view.lastTab="CLIENTE"; renderClient(); };
+      const btn=el("button","tab active","Horarios");
+      btn.onclick=()=>{ state.project.view.lastTab="CLIENTE"; window.renderClient(); };
       tabs.appendChild(btn);
     }
   });
